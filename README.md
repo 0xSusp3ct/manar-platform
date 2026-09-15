@@ -28,6 +28,18 @@ pnpm create-admin owner@example.com "a-long-unique-password"
 
 ## النشر
 
+### Vercel مع Turso Cloud
+
+تتضمن هذه النسخة محولًا جاهزًا لـ Vercel في `api/index.js` وقاعدة SQLite دائمة عبر تكامل Turso Cloud المجاني. بعد استيراد المستودع إلى Vercel:
+
+1. ثبّت تكامل Turso Cloud واربط قاعدة جديدة بالمشروع؛ يضيف Vercel المتغيرين `TURSO_DATABASE_URL` و`TURSO_AUTH_TOKEN` تلقائيًا.
+2. أضف `TOKEN_SECRET` و`ADMIN_EMAIL` و`ADMIN_PASSWORD` و`SCORING_PROFILE=current50` إلى متغيرات المشروع في Vercel.
+3. أعد نشر المشروع، ثم تحقق من `/api/health` وصفحة `/admin`.
+
+تهيئ الدالة جداول قاعدة البيانات آليًا عند أول طلب. لا تحفظ قيم الأسرار داخل المستودع. ويمكن اختبار محول Vercel محليًا بالأمر `pnpm test:vercel`.
+
+### الاستضافة التقليدية
+
 المشروع تطبيق Node.js دائم التشغيل ويستخدم SQLite. يحتاج إلى استضافة تدعم:
 
 - Node.js 24؛

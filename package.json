@@ -10,12 +10,14 @@
     "dev": "node --watch server.js",
     "test": "node scripts/smoke-test.js && node scripts/quality-test.js",
     "test:browser": "node scripts/browser-test.js",
-    "create-admin": "node scripts/create-admin.js"
+    "create-admin": "node scripts/create-admin.js",
+    "test:vercel": "node scripts/vercel-test.mjs"
   },
   "engines": {
     "node": ">=24"
   },
   "dependencies": {
+    "@libsql/client": "^0.15.15",
     "cookie-parser": "^1.4.7",
     "dotenv": "^17.2.2",
     "express": "^5.1.0",
