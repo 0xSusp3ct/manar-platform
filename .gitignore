@@ -9,3 +9,7 @@ backups/
 coverage/
 *.log
 .DS_Store
+
+.vercel
+.agents/
+skills-lock.json
