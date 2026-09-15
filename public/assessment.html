@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow"><title>التقييم | مقياس منار</title>
+  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/styles.css">
+  <script src="/js/assessment.js" type="module"></script>
+</head>
+<body class="assessment-layout">
+  <header class="assessment-top">
+    <div class="assessment-top-inner">
+      <a class="brand" href="/"><span class="brand-mark">م</span><span class="brand-copy">مقياس منار<small>جلسة تقييم خاصة</small></span></a>
+      <div class="progress-meta"><div class="small muted"><span id="progress-label">التهيئة</span></div><div class="progress-track"><div class="progress-fill" id="progress-fill"></div></div></div>
+      <div class="save-status" id="save-status" aria-live="polite">لم تُحفظ تغييرات بعد</div>
+    </div>
+  </header>
+  <main class="assessment-main">
+    <section id="loading" class="card">جارٍ تجهيز المقياس...</section>
+    <section id="assessment-content" class="hidden">
+      <div id="meta-step">
+        <span class="axis-kicker">بيانات التقرير</span><h1 class="axis-title">عرّف الجهة وفريق التقييم</h1>
+        <p class="muted">ستظهر هذه البيانات في التقرير النهائي. تأكد من كتابتها بصيغتها الرسمية.</p>
+        <div class="assessment-meta">
+          <div class="field"><label for="entityName">اسم الجهة</label><input id="entityName" type="text" maxlength="160" required></div>
+          <div class="field"><label for="assessorName">اسم المقيم أو فريق التقييم</label><input id="assessorName" type="text" maxlength="120" required></div>
+          <div class="field"><label for="evaluationDate">تاريخ التقييم</label><input id="evaluationDate" type="date" required></div>
+        </div>
+      </div>
+      <div id="axis-step" class="hidden">
+        <span class="axis-kicker" id="domain-title"></span><h1 class="axis-title" id="axis-title"></h1>
+        <p class="muted">اختر المستوى الذي يعكس واقع الجهة اعتمادًا على الشواهد المتاحة.</p>
+        <div class="question-list" id="question-list"></div>
+      </div>
+      <div id="review-step" class="hidden">
+        <span class="axis-kicker">المراجعة النهائية</span><h1 class="axis-title">التقييم مكتمل وجاهز للإرسال</h1>
+        <p class="muted" id="review-summary"></p>
+        <div class="card"><h2>قبل الإرسال</h2><p>راجع الإجابات عند الحاجة. بعد الإرسال تحفظ النتيجة ويصبح التقرير للعرض فقط، ولا يمكن تعديل الإجابات.</p><label class="confirm-box"><input id="confirm-submit" type="checkbox"><span>أقر بأن الإجابات مكتملة وتعكس تقييم الجهة، وأفهم أن الإرسال النهائي غير قابل للتعديل.</span></label></div>
+      </div>
+      <div class="notice notice-error hidden" id="assessment-message" aria-live="assertive"></div>
+      <nav class="assessment-nav" aria-label="التنقل بين خطوات التقييم">
+        <button class="button button-outline" id="previous-step" type="button">السابق</button>
+        <span class="save-status" id="step-counter"></span>
+        <button class="button button-dark" id="next-step" type="button">التالي</button>
+      </nav>
+    </section>
+  </main>
+</body>
+</html>

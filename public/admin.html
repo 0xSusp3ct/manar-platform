@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow"><title>إدارة مقياس منار</title>
+  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/styles.css">
+  <script src="/js/admin.js" type="module"></script>
+</head>
+<body>
+  <main id="admin-login" class="form-shell">
+    <section class="form-card"><span class="eyebrow">بوابة الإدارة</span><h1>تسجيل دخول المالك</h1><p class="muted">هذه الصفحة مخصصة لإدارة الطلبات والرموز والنتائج.</p>
+      <form id="login-form"><div class="field"><label for="admin-email">البريد الإلكتروني</label><input id="admin-email" type="email" autocomplete="username" required></div><div class="field"><label for="admin-password">كلمة المرور</label><input id="admin-password" type="password" autocomplete="current-password" required></div><button class="button button-dark" type="submit">دخول</button><div class="notice hidden" id="login-message" aria-live="polite"></div></form>
+    </section>
+  </main>
+
+  <div id="admin-app" class="admin-shell hidden">
+    <aside class="admin-sidebar">
+      <a class="brand" href="/"><span class="brand-mark">م</span><span>إدارة منار</span></a>
+      <nav aria-label="أقسام الإدارة">
+        <button class="active" data-section="requests" type="button">الطلبات</button>
+        <button data-section="codes" type="button">رموز الدخول</button>
+        <button data-section="results" type="button">النتائج</button>
+        <button data-section="users" type="button">المستخدمون</button>
+      </nav>
+    </aside>
+    <main class="admin-main">
+      <div class="admin-heading"><div><span class="eyebrow">لوحة التحكم</span><h1 id="admin-section-title">الطلبات</h1></div><div class="actions"><button class="button button-small button-primary" id="new-code" type="button">إنشاء رمز مستقل</button><button class="button button-small button-light" id="add-supervisor" type="button">إضافة مشرف</button><button class="button button-small button-outline" id="refresh-admin" type="button">تحديث</button><button class="button button-small button-danger" id="logout" type="button">خروج</button></div></div>
+      <div class="notice hidden" id="admin-message" aria-live="polite"></div>
+      <section class="stat-grid"><article class="stat"><span>طلبات بانتظار الاعتماد</span><strong id="pending-count">٠</strong></article><article class="stat"><span>رموز فعالة</span><strong id="active-count">٠</strong></article><article class="stat"><span>تقارير مكتملة</span><strong id="result-count">٠</strong></article></section>
+      <section id="requests-section" class="admin-section"><div class="table-wrap"><table><thead><tr><th>الجهة</th><th>ممثل الجهة</th><th>التواصل</th><th>الحالة</th><th>التاريخ</th><th>الإجراءات</th></tr></thead><tbody id="requests-body"></tbody></table></div></section>
+      <section id="codes-section" class="admin-section hidden"><div class="table-wrap"><table><thead><tr><th>الجهة / الوصف</th><th>آخر ٤ رموز</th><th>الحالة</th><th>الصلاحية</th><th>الإنشاء</th><th>الإجراءات</th></tr></thead><tbody id="codes-body"></tbody></table></div></section>
+      <section id="results-section" class="admin-section hidden"><div class="table-wrap"><table><thead><tr><th>الجهة</th><th>النتيجة</th><th>النضج</th><th>التاريخ</th><th>الإجراءات</th></tr></thead><tbody id="results-body"></tbody></table></div></section>
+      <section id="users-section" class="admin-section hidden"><div class="table-wrap"><table><thead><tr><th>البريد الإلكتروني</th><th>الدور</th><th>الحالة</th><th>تاريخ الإنشاء</th><th>الإجراءات</th></tr></thead><tbody id="users-body"></tbody></table></div></section>
+    </main>
+  </div>
+
+  <div class="drawer hidden" id="admin-drawer"><section class="drawer-panel"><div class="admin-heading"><h2 id="drawer-title">التفاصيل</h2><button class="button button-small button-outline" id="close-drawer" type="button">إغلاق</button></div><div id="drawer-content"></div></section></div>
+</body>
+</html>

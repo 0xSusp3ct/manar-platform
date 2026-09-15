@@ -1,0 +1,10 @@
+node_modules
+.git
+.env
+.env.*
+data
+backups
+*.db
+*.db-*
+coverage
+*.log

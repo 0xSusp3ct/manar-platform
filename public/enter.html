@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>دخول التقييم | مقياس منار</title>
+  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/styles.css">
+  <script src="/js/site.js" defer></script>
+</head>
+<body>
+  <header class="site-header"><nav class="nav"><a class="brand" href="/"><span class="brand-mark">م</span><span class="brand-copy">مقياس منار<small>للتميز التربوي المؤسسي</small></span></a><a class="button button-small button-outline" href="/">الصفحة الرئيسية</a></nav></header>
+  <main class="form-shell">
+    <section class="form-card">
+      <span class="eyebrow">دخول مخصص للجهة</span>
+      <h1>أدخل رمز الدعوة</h1>
+      <p class="muted">يُستخدم الرمز مرة واحدة لفتح جلسة تقييم آمنة. بعد الإرسال النهائي لا يمكن تعديل الإجابات.</p>
+      <form data-access-form>
+        <div class="field"><label for="code">رمز الدخول</label><input id="code" class="ltr" name="code" type="text" autocomplete="one-time-code" placeholder="MNR-XXXX-XXXX-XXXX" required></div>
+        <button class="button button-dark" type="submit">متابعة إلى التقييم</button>
+        <div class="notice hidden" data-form-message aria-live="polite"></div>
+      </form>
+      <p class="small muted">ليس لديك رمز؟ <a href="/#request">أرسل طلب تطبيق</a>.</p>
+      <p class="small muted">بدأت التقييم في هذا المتصفح؟ <a href="/assessment.html">تابع التقييم المحفوظ</a>.</p>
+    </section>
+  </main>
+</body>
+</html>

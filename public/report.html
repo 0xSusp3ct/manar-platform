@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow"><title>التقرير النهائي | مقياس منار</title>
+  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/report.css">
+  <script src="/vendor/html2canvas/html2canvas.min.js" defer></script>
+  <script src="/vendor/jspdf/jspdf.umd.min.js" defer></script>
+  <script src="/js/report.js" defer></script>
+</head>
+<body class="results-page">
+  <header class="results-header no-print"><nav class="container nav" aria-label="التنقل الرئيسي">
+    <a class="brand" href="/"><span class="brand-mark">م</span><span class="brand-copy">مقياس منار<small>لوحة نتائج التقييم</small></span></a>
+    <a class="button button-small button-light" href="/">الصفحة الرئيسية</a>
+  </nav></header>
+  <main>
+    <div class="container notice hidden no-print" id="report-message" role="status"></div>
+    <section id="report-loading" class="container card no-print" role="status">جارٍ تحميل التقرير الخاص...</section>
+    <div id="screen-report" class="container results-dashboard hidden no-print">
+      <div class="results-heading"><div><span class="eyebrow">تقرير تشخيصي مؤسسي</span><h1 id="report-entity-title"></h1><p id="report-date" class="muted"></p></div>
+        <div class="report-actions"><button class="button button-primary" id="download-pdf" disabled>تنزيل PDF</button><button class="button button-light" id="print-report" disabled>طباعة</button></div>
+      </div>
+      <div class="result-kpis" id="result-kpis"></div>
+      <div class="dashboard-grid"><section class="card domain-panel"><h2>نتائج المجالات</h2><div id="domain-bars" class="domain-bars"></div></section>
+        <section class="card insight-panel"><span class="eyebrow">الخطوة التالية</span><h2 id="maturity-level"></h2><p id="system-recommendation"></p><div class="result-metadata" id="result-metadata"></div></section></div>
+      <section class="card axes-panel"><div class="panel-heading"><h2>نتائج المحاور</h2><span class="muted small">النسبة المئوية لكل محور</span></div><div id="axis-bars" class="axis-bars"></div></section>
+      <div class="dashboard-grid findings-grid"><section class="card"><h2>نقاط القوة</h2><div id="screen-strengths" class="findings"></div></section><section class="card"><h2>فرص التحسين</h2><div id="screen-opportunities" class="findings"></div></section></div>
+      <div class="dashboard-grid"><section class="card"><h2>توصيات المشرف</h2><p class="advisory-copy" id="supervisor-recommendations"></p></section><section class="card"><h2>خطة التحسين</h2><p class="advisory-copy" id="improvement-plan"></p></section></div>
+      <footer class="results-footer"><p>تقرير خاص بالجهة للعرض فقط. شارك الرابط مع الجهة المعنية فقط.</p><div class="report-actions"><button class="button button-light button-small" id="copy-link" disabled>نسخ رابط التقرير</button><button class="button button-light button-small" id="copy-summary" disabled>نسخ الملخص</button></div></footer>
+    </div>
+    <div id="report-pages" class="print-document" aria-hidden="true"></div>
+  </main>
+</body>
+</html>
