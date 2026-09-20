@@ -14,9 +14,9 @@
       <h1>أدخل رمز الدعوة</h1>
       <p class="muted">يُستخدم الرمز مرة واحدة لفتح جلسة تقييم آمنة. بعد الإرسال النهائي لا يمكن تعديل الإجابات.</p>
       <form data-access-form>
-        <div class="field"><label for="code">رمز الدخول</label><input id="code" class="ltr" name="code" type="text" autocomplete="one-time-code" placeholder="MNR-XXXX-XXXX-XXXX" required></div>
+        <div class="field"><label for="code">رمز الدخول</label><input id="code" class="ltr" name="code" type="text" autocomplete="one-time-code" placeholder="MNR-XXXX-XXXX-XXXX" aria-describedby="code-message" required></div>
         <button class="button button-dark" type="submit">متابعة إلى التقييم</button>
-        <div class="notice hidden" data-form-message aria-live="polite"></div>
+        <div class="notice hidden" id="code-message" data-form-message role="status" aria-live="polite"></div>
       </form>
       <p class="small muted">ليس لديك رمز؟ <a href="/#request">أرسل طلب تطبيق</a>.</p>
       <p class="small muted">بدأت التقييم في هذا المتصفح؟ <a href="/assessment.html">تابع التقييم المحفوظ</a>.</p>

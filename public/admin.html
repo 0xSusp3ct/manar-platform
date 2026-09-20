@@ -8,7 +8,7 @@
 </head>
 <body>
   <main id="admin-login" class="form-shell">
-    <section class="form-card"><span class="eyebrow">بوابة الإدارة</span><h1>تسجيل دخول المالك</h1><p class="muted">هذه الصفحة مخصصة لإدارة الطلبات والرموز والنتائج.</p>
+    <section class="form-card"><span class="eyebrow">بوابة الإدارة</span><h1>تسجيل دخول الإدارة</h1><p class="muted">هذه الصفحة مخصصة لإدارة الطلبات والرموز والنتائج وفق صلاحيات الحساب.</p>
       <form id="login-form"><div class="field"><label for="admin-email">البريد الإلكتروني</label><input id="admin-email" type="email" autocomplete="username" required></div><div class="field"><label for="admin-password">كلمة المرور</label><input id="admin-password" type="password" autocomplete="current-password" required></div><button class="button button-dark" type="submit">دخول</button><div class="notice hidden" id="login-message" aria-live="polite"></div></form>
     </section>
   </main>
@@ -34,6 +34,6 @@
     </main>
   </div>
 
-  <div class="drawer hidden" id="admin-drawer"><section class="drawer-panel"><div class="admin-heading"><h2 id="drawer-title">التفاصيل</h2><button class="button button-small button-outline" id="close-drawer" type="button">إغلاق</button></div><div id="drawer-content"></div></section></div>
+  <div class="drawer hidden" id="admin-drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title"><section class="drawer-panel" tabindex="-1"><div class="admin-heading"><h2 id="drawer-title">التفاصيل</h2><button class="button button-small button-outline" id="close-drawer" type="button">إغلاق</button></div><div id="drawer-content"></div></section></div>
 </body>
 </html>

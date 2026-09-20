@@ -24,6 +24,15 @@ async function printFits(page) {
 }
 try {
   const page=await context.newPage(); await page.goto(base);
+  await check('Wrong access code shows an accessible inline error',async()=>{
+    await page.locator('#hero-code').fill('MNR-WRONG-CODE');
+    await page.locator('.code-inline button').click();
+    await page.locator('#hero-code-message.notice-error').waitFor();
+    assert.equal(await page.locator('#hero-code').getAttribute('aria-invalid'),'true');
+    assert.match(await page.locator('#hero-code-message').innerText(),/الرمز/);
+    await page.locator('#hero-code').fill('');
+    assert.equal(await page.locator('#hero-code').getAttribute('aria-invalid'),null);
+  });
   await check('Request form and desktop home',async()=>{
     await noOverflow(page,'home desktop'); await page.screenshot({path:path.join(output,'home-desktop.png')});
     const form=page.locator('#request-form');
@@ -31,11 +40,21 @@ try {
     await form.locator('[name=assessorName]').fill('فريق الجودة التجريبي');
     await form.locator('[name=email]').fill('sample@example.test');
     await form.locator('button[type=submit]').click();
-    await page.getByText('تم استلام الطلب وسيصل رمز الدخول بعد اعتماده.').waitFor();
+    await page.getByText('تم استلام الطلب. ستراجع الإدارة الطلب وتشارك رمز الدخول بعد اعتماده.').waitFor();
   });
   const admin=await context.newPage(); await admin.goto(base+'/admin');
   await admin.locator('#admin-email').fill(process.env.ADMIN_EMAIL); await admin.locator('#admin-password').fill(process.env.ADMIN_PASSWORD);
   await admin.locator('#login-form button').click(); await admin.locator('#requests-body [data-action=approve]').waitFor();
+  await check('Administration dialogs support focus and Escape',async()=>{
+    await admin.locator('#new-code').click();
+    assert.equal(await admin.locator('#manual-code-label').isVisible(),true);
+    assert.equal(await admin.evaluate(()=>document.activeElement.id),'manual-code-label');
+    await admin.keyboard.press('Escape');
+    assert.equal(await admin.locator('#admin-drawer').isVisible(),false);
+    await admin.locator('#add-supervisor').click();
+    assert.equal(await admin.locator('#supervisor-email').isVisible(),true);
+    await admin.keyboard.press('Escape');
+  });
   let code;
   await check('Owner approves request and issues code',async()=>{
     const response=admin.waitForResponse(r=>r.url().includes('/approve')&&r.request().method()==='POST');
@@ -130,6 +149,7 @@ try {
   });
   await check('Mobile home, navigation, access and administration',async()=>{
     await page.setViewportSize({width:320,height:844}); await page.goto(base); await noOverflow(page,'320 home');
+    await page.screenshot({path:path.join(output,'home-mobile.png'),fullPage:true});
     await page.locator('.nav-toggle').click(); assert.equal(await page.locator('.nav-toggle').getAttribute('aria-expanded'),'true');
     await page.goto(base+'/enter.html'); await noOverflow(page,'320 access');
     await admin.setViewportSize({width:390,height:844}); await noOverflow(admin,'390 admin');

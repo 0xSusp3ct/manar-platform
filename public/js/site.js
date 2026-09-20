@@ -9,8 +9,12 @@ if (navToggle && navLinks) {
 
 document.querySelectorAll('[data-access-form]').forEach((form) => {
   const code = form.querySelector('[name="code"]');
-  const message = form.querySelector('[data-form-message]');
-  code.addEventListener('input', () => { code.value = code.value.toUpperCase(); });
+  const message = form.querySelector('[data-form-message]') || form.parentElement.querySelector('[data-form-message]');
+  code.addEventListener('input', () => {
+    code.value = code.value.toUpperCase();
+    code.removeAttribute('aria-invalid');
+    message.classList.add('hidden');
+  });
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
     const button = form.querySelector('button[type="submit"]');
@@ -21,12 +25,20 @@ document.querySelectorAll('[data-access-form]').forEach((form) => {
       window.location.assign(response.redirect);
     } catch (error) {
       showMessage(message, error.message, 'error');
+      code.setAttribute('aria-invalid', 'true');
+      code.focus();
       button.disabled = false;
     }
   });
 });
 
 const requestForm = document.getElementById('request-form');
+const deliveryNote = document.getElementById('request-delivery-note');
+if (deliveryNote) {
+  api('/api/config').then(({ emailReady }) => {
+    if (emailReady) deliveryNote.textContent = 'بعد مراجعة الطلب، ترسل الإدارة رمز الدخول إلى البريد المسجل. لن تظهر إجابات التقييم في الرابط.';
+  }).catch(() => {});
+}
 if (requestForm) {
   requestForm.addEventListener('submit', async (event) => {
     event.preventDefault();

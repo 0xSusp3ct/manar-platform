@@ -97,6 +97,8 @@ export default {
         ADMIN_EMAIL: process.env.ADMIN_EMAIL,
         ADMIN_PASSWORD: process.env.ADMIN_PASSWORD,
         SCORING_PROFILE: process.env.SCORING_PROFILE || "current50",
+        RESEND_API_KEY: process.env.RESEND_API_KEY,
+        RESEND_FROM: process.env.RESEND_FROM,
       });
     } catch (error) {
       console.error("Manar Vercel adapter failed", error?.stack || error);

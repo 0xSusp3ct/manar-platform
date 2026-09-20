@@ -1,4 +1,5 @@
 const state = { data: null, section: 'requests' };
+let drawerReturnFocus = null;
 const ui = {
   login: document.getElementById('admin-login'), app: document.getElementById('admin-app'), loginForm: document.getElementById('login-form'),
   loginMessage: document.getElementById('login-message'), message: document.getElementById('admin-message'), title: document.getElementById('admin-section-title'),
@@ -31,6 +32,15 @@ document.getElementById('new-code').addEventListener('click', createManualCode);
 document.getElementById('add-supervisor').addEventListener('click', createSupervisor);
 document.getElementById('close-drawer').addEventListener('click', closeDrawer);
 ui.drawer.addEventListener('click', (event) => { if (event.target === ui.drawer) closeDrawer(); });
+ui.drawer.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') { event.preventDefault(); closeDrawer(); return; }
+  if (event.key !== 'Tab') return;
+  const focusable = [...ui.drawer.querySelectorAll('button:not(:disabled), input:not(:disabled), textarea:not(:disabled), a[href]')];
+  if (!focusable.length) return;
+  const first = focusable[0]; const last = focusable[focusable.length - 1];
+  if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+  else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+});
 document.addEventListener('click', handleAction);
 
 function showApp() { ui.login.classList.add('hidden'); ui.app.classList.remove('hidden'); }
@@ -84,7 +94,7 @@ async function handleAction(event) {
   try {
     if (action === 'approve') {
       const result = await api(`/api/admin/requests/${id}/approve`, { method: 'POST', body: { sendEmail: true, expiresInDays: 14 } });
-      const emailNote = result.emailDelivery?.sent ? ' وتم إرساله بالبريد.' : ' لم يُرسل بالبريد لأن خدمة الإرسال غير مهيأة أو تعذر الإرسال.';
+      const emailNote = result.emailDelivery?.sent ? ' وتم إرساله بالبريد.' : result.emailDelivery?.reason === 'not_configured' ? ' خدمة البريد غير مهيأة؛ انسخ الرمز وشاركه مع الجهة عبر قناة آمنة.' : ' لم يتأكد إرسال البريد؛ انسخ الرمز وشاركه مع الجهة عبر قناة آمنة.';
       show(ui.message, `رمز الدخول: ${result.accessCode}.${emailNote} انسخه الآن؛ لن يظهر كاملًا مرة أخرى.`, 'success'); await loadOverview();
     }
     if (action === 'reject' && window.confirm('هل تريد رفض هذا الطلب؟')) { await api(`/api/admin/requests/${id}/status`, { method: 'POST', body: { status: 'rejected' } }); await loadOverview(); }
@@ -102,8 +112,8 @@ function openResult(id) {
   ui.drawerTitle.textContent = `تقرير ${row.entity.entityName}`;
   ui.drawerContent.innerHTML = `<div class="grid-2"><div class="card"><span class="muted small">النتيجة</span><h3>${number(row.result.overallPercent)}٪</h3></div><div class="card"><span class="muted small">النضج</span><h3>${escapeHtml(row.result.maturity)}</h3></div></div>
     <form id="advisory-form" data-result-id="${row.id}"><div class="field"><label for="recommendations">توصيات المشرف</label><textarea id="recommendations" maxlength="8000">${escapeHtml(row.recommendations || '')}</textarea></div><div class="field"><label for="improvement-plan">خطة التحسين</label><textarea id="improvement-plan" maxlength="8000">${escapeHtml(row.improvement_plan || '')}</textarea></div><button class="button button-dark" type="submit">حفظ دون تغيير الإجابات</button></form>
-    <div class="card"><h3>رابط التقرير الخاص</h3><p>إنشاء رابط جديد يلغي الرابط السابق. يمكن نسخه أو إرساله إلى بريد الجهة.</p><label class="confirm-box"><input id="send-report-email" type="checkbox" ${row.email ? '' : 'disabled'}><span>إرسال الرابط الجديد إلى ${escapeHtml(row.email || 'لا يوجد بريد مرتبط')}</span></label><button class="button button-primary" id="create-report-link" data-result-id="${row.id}" type="button">إنشاء رابط مشاركة جديد</button><div class="notice hidden" id="share-result"></div></div>`;
-  ui.drawer.classList.remove('hidden');
+    <div class="card"><h3>رابط التقرير الخاص</h3><p>إنشاء رابط جديد يلغي الرابط السابق. يمكن نسخه${state.data.emailReady ? ' أو إرساله إلى بريد الجهة' : ' ومشاركته يدويًا؛ خدمة البريد غير مهيأة حاليًا'}.</p><label class="confirm-box"><input id="send-report-email" type="checkbox" ${row.email && state.data.emailReady ? '' : 'disabled'}><span>إرسال الرابط الجديد إلى ${escapeHtml(row.email || 'لا يوجد بريد مرتبط')}</span></label><button class="button button-primary" id="create-report-link" data-result-id="${row.id}" type="button">إنشاء رابط مشاركة جديد</button><div class="notice hidden" id="share-result" role="status" aria-live="polite"></div></div>`;
+  showDrawer();
   document.getElementById('advisory-form').addEventListener('submit', saveAdvisory);
   document.getElementById('create-report-link').addEventListener('click', createShareLink);
 }
@@ -124,7 +134,7 @@ async function createShareLink(event) {
   try {
     const result = await api(`/api/admin/results/${button.dataset.resultId}/share-link`, { method: 'POST', body: { sendEmail: document.getElementById('send-report-email').checked } });
     target.className = 'notice notice-success'; target.replaceChildren();
-    const label = document.createElement('p'); label.textContent = result.emailDelivery?.sent ? 'أُنشئ الرابط وأُرسل بالبريد:' : 'أُنشئ الرابط الخاص:';
+    const label = document.createElement('p'); label.textContent = result.emailDelivery?.sent ? 'أُنشئ الرابط وأُرسل بالبريد:' : result.emailDelivery?.reason === 'delivery_failed' ? 'أُنشئ الرابط لكن تعذر إرسال البريد. انسخه وشاركه يدويًا:' : 'أُنشئ الرابط الخاص. انسخه وشاركه عبر قناة آمنة:';
     const link = document.createElement('a'); link.href = result.reportUrl; link.textContent = result.reportUrl; link.className = 'ltr'; link.target = '_blank'; link.rel = 'noopener';
     target.append(label, link); await loadOverview();
   } catch (error) { show(target, error.message, 'error'); }
@@ -132,23 +142,35 @@ async function createShareLink(event) {
 }
 
 async function createManualCode() {
-  const label = window.prompt('اكتب اسم الجهة أو وصف الرمز:');
-  if (!label?.trim()) return;
-  try {
-    const result = await api('/api/admin/codes', { method: 'POST', body: { label: label.trim(), expiresInDays: 14 } });
-    show(ui.message, `الرمز الجديد: ${result.accessCode}. انسخه الآن؛ لن يظهر كاملًا مرة أخرى.`, 'success'); await loadOverview(); setSection('codes');
-  } catch (error) { show(ui.message, error.message, 'error'); }
+  ui.drawerTitle.textContent = 'إنشاء رمز دخول مستقل';
+  ui.drawerContent.innerHTML = `<form id="manual-code-form"><p class="muted">أنشئ رمزًا لجهة لم تتقدم بطلب عبر الموقع. يظهر الرمز كاملًا مرة واحدة بعد إنشائه.</p><div class="field"><label for="manual-code-label">اسم الجهة أو وصف الرمز</label><input id="manual-code-label" type="text" maxlength="160" required></div><button class="button button-primary" type="submit">إنشاء الرمز</button><div class="notice hidden" id="manual-code-message" role="status" aria-live="polite"></div></form>`;
+  showDrawer('#manual-code-label');
+  document.getElementById('manual-code-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const form = event.currentTarget; const button = form.querySelector('button[type="submit"]'); button.disabled = true;
+    try {
+      const result = await api('/api/admin/codes', { method: 'POST', body: { label: document.getElementById('manual-code-label').value.trim(), expiresInDays: 14 } });
+      show(document.getElementById('manual-code-message'), `الرمز الجديد: ${result.accessCode}. انسخه الآن؛ لن يظهر كاملًا مرة أخرى.`, 'success');
+      await loadOverview(); setSection('codes');
+    } catch (error) { show(document.getElementById('manual-code-message'), error.message, 'error'); }
+    finally { button.disabled = false; }
+  });
 }
 
 async function createSupervisor() {
-  const email = window.prompt('البريد الإلكتروني للمشرف:');
-  if (!email?.trim()) return;
-  const password = window.prompt('كلمة مرور مؤقتة قوية (١٢ حرفًا على الأقل):');
-  if (!password) return;
-  try {
-    await api('/api/admin/users', { method: 'POST', body: { email: email.trim(), password, role: 'supervisor' } });
-    show(ui.message, 'تم إنشاء حساب المشرف. شارك بياناته معه عبر قناة آمنة.', 'success'); await loadOverview(); setSection('users');
-  } catch (error) { show(ui.message, error.message, 'error'); }
+  ui.drawerTitle.textContent = 'إضافة مشرف تقارير';
+  ui.drawerContent.innerHTML = `<form id="supervisor-form"><p class="muted">يستطيع مشرف التقارير مراجعة النتائج وإضافة التوصيات، ولا يستطيع إدارة المستخدمين أو إصدار الرموز.</p><div class="field"><label for="supervisor-email">البريد الإلكتروني</label><input id="supervisor-email" type="email" autocomplete="off" maxlength="180" required></div><div class="field"><label for="supervisor-password">كلمة مرور مؤقتة قوية</label><input id="supervisor-password" type="password" autocomplete="new-password" minlength="12" maxlength="300" required><small>١٢ حرفًا على الأقل. شاركها مع المشرف عبر قناة آمنة.</small></div><button class="button button-primary" type="submit">إنشاء الحساب</button><div class="notice hidden" id="supervisor-message" role="status" aria-live="polite"></div></form>`;
+  showDrawer('#supervisor-email');
+  document.getElementById('supervisor-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const form = event.currentTarget; const button = form.querySelector('button[type="submit"]'); button.disabled = true;
+    try {
+      await api('/api/admin/users', { method: 'POST', body: { email: document.getElementById('supervisor-email').value.trim(), password: document.getElementById('supervisor-password').value, role: 'supervisor' } });
+      show(document.getElementById('supervisor-message'), 'تم إنشاء حساب المشرف. شارك بياناته معه عبر قناة آمنة.', 'success');
+      form.reset(); await loadOverview(); setSection('users');
+    } catch (error) { show(document.getElementById('supervisor-message'), error.message, 'error'); }
+    finally { button.disabled = false; }
+  });
 }
 
 function setSection(section) {
@@ -160,7 +182,16 @@ function setSection(section) {
   document.getElementById(`${section}-section`).classList.remove('hidden');
 }
 
-function closeDrawer() { ui.drawer.classList.add('hidden'); ui.drawerContent.replaceChildren(); }
+function showDrawer(firstFocus = '#close-drawer') {
+  drawerReturnFocus = document.activeElement;
+  ui.drawer.classList.remove('hidden');
+  document.querySelector(firstFocus).focus();
+}
+function closeDrawer() {
+  ui.drawer.classList.add('hidden'); ui.drawerContent.replaceChildren();
+  if (drawerReturnFocus?.isConnected) drawerReturnFocus.focus();
+  drawerReturnFocus = null;
+}
 function status(value) { const labels = { pending: 'قيد المراجعة', approved: 'معتمد', rejected: 'مرفوض', active: 'فعال', used: 'مستخدم', stopped: 'موقوف' }; return `<span class="status ${value}">${labels[value] || escapeHtml(value)}</span>`; }
 function emptyRow(columns, text) { return `<tr><td colspan="${columns}"><div class="empty-state">${text}</div></td></tr>`; }
 function date(value) { return value ? new Intl.DateTimeFormat('ar-SA', { year: 'numeric', month: 'short', day: 'numeric' }).format(new Date(value)) : '-'; }

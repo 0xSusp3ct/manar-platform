@@ -10,8 +10,10 @@
     "dev": "node --watch server.js",
     "test": "node scripts/smoke-test.js && node scripts/quality-test.js",
     "test:browser": "node scripts/browser-test.js",
+    "build:vercel-assets": "node scripts/embed-vercel-assets.mjs",
     "create-admin": "node scripts/create-admin.js",
-    "test:vercel": "node scripts/vercel-test.mjs"
+    "test:vercel": "node scripts/vercel-test.mjs",
+    "test:email": "node scripts/email-test.mjs"
   },
   "engines": {
     "node": ">=24"

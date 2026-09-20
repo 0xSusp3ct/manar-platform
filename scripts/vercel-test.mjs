@@ -7,6 +7,9 @@ process.env.ADMIN_EMAIL = "owner@manar.test";
 process.env.ADMIN_PASSWORD = "Owner-Test-Password-2026!";
 process.env.SCORING_PROFILE = "current50";
 
+const originalFetch = globalThis.fetch;
+const emailCalls = [];
+
 let closeDatabaseForTests;
 try {
   const module = await import("../api/index.js");
@@ -38,6 +41,23 @@ try {
   out = await call("/");
   assert.equal(out.response.status, 200);
   assert.match(new TextDecoder().decode(out.data), /مقياس منار/);
+  out = await call('/admin');
+  assert.equal(out.response.status, 200);
+  assert.match(new TextDecoder().decode(out.data), /تسجيل دخول الإدارة/);
+  out = await call('/vendor/jspdf/jspdf.umd.min.js');
+  assert.equal(out.response.status, 200);
+  assert(out.data.byteLength > 300000);
+
+  out = await call("/api/config");
+  assert.equal(out.data.emailReady, false);
+  process.env.RESEND_API_KEY = 're_test_only';
+  process.env.RESEND_FROM = 'Manar <reports@example.test>';
+  globalThis.fetch = async (url, init) => {
+    emailCalls.push({ url: String(url), body: JSON.parse(init.body) });
+    return new Response(JSON.stringify({ id: `message-${emailCalls.length}` }), { status: 200, headers: { 'content-type': 'application/json' } });
+  };
+  out = await call("/api/config");
+  assert.equal(out.data.emailReady, true);
 
   out = await call("/api/requests", { method: "POST", body: { entityName: "جهة التجربة", assessorName: "فريق الجودة", email: "quality@example.test", phone: "", notes: "اختبار" } });
   assert.equal(out.response.status, 201);
@@ -53,6 +73,7 @@ try {
   out = await call(`/api/admin/requests/${out.data.requests[0].id}/approve`, { method: "POST", cookie: adminCookie, body: { sendEmail: true, expiresInDays: 14 } });
   assert.equal(out.response.status, 201);
   assert.match(out.data.accessCode, /^MNR-/);
+  assert.equal(out.data.emailDelivery.sent, true);
   const code = out.data.accessCode;
 
   out = await call("/api/access", { method: "POST", body: { code } });
@@ -73,6 +94,7 @@ try {
 
   out = await call("/api/assessment/submit", { method: "POST", cookie: assessmentCookie, body: payload });
   assert.equal(out.response.status, 201);
+  assert.equal(out.data.emailDelivery.sent, true);
   const token = new URL(out.data.reportUrl).pathname.split("/").pop();
 
   out = await call(`/api/reports/${token}`);
@@ -89,14 +111,25 @@ try {
   assert.equal(out.response.status, 200);
   assert.deepEqual([...out.data.slice(0, 4)], [0x50, 0x4b, 0x03, 0x04]);
 
-  out = await call(`/api/admin/results/${resultId}/share-link`, { method: "POST", cookie: adminCookie, body: { sendEmail: false } });
+  out = await call(`/api/admin/results/${resultId}/share-link`, { method: "POST", cookie: adminCookie, body: { sendEmail: true } });
   assert.equal(out.response.status, 200);
+  assert.equal(out.data.emailDelivery.sent, true);
   const newToken = new URL(out.data.reportUrl).pathname.split("/").pop();
   assert.notEqual(newToken, token);
   assert.equal((await call(`/api/reports/${token}`)).response.status, 404);
   assert.equal((await call(`/api/reports/${newToken}`)).response.status, 200);
+  assert.equal(emailCalls.length, 3);
+  assert(emailCalls.every((call) => call.url === 'https://api.resend.com/emails'));
+  assert.match(emailCalls[0].body.subject, /رمز الدخول/);
+  assert.match(emailCalls[1].body.subject, /التقرير النهائي/);
+  assert.match(emailCalls[2].body.subject, /التقرير النهائي/);
+  const invalidToken = 'x'.repeat(43);
+  let rateLimited;
+  for (let index = 0; index < 58; index++) rateLimited = await call(`/api/reports/${invalidToken}`);
+  assert.equal(rateLimited.response.status, 429);
 
   console.log("Vercel adapter test passed: persistent SQLite, owner login, approval code, draft, 50-question result, private report, advisory, XLSX export, and link rotation.");
 } finally {
   closeDatabaseForTests?.();
+  globalThis.fetch = originalFetch;
 }

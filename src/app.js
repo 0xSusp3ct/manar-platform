@@ -86,7 +86,7 @@ export async function createApp(options = {}) {
       safePublicValue(data.entityName, 160), safePublicValue(data.assessorName, 120), data.email.toLowerCase(),
       safePublicValue(data.phone, 32), safePublicValue(data.notes, 1200), now
     );
-    res.status(201).json({ ok: true, requestId: Number(result.lastInsertRowid), message: 'تم استلام الطلب وسيصل رمز الدخول بعد اعتماده.' });
+    res.status(201).json({ ok: true, requestId: Number(result.lastInsertRowid), message: emailReady() ? 'تم استلام الطلب. بعد اعتماده سيصل رمز الدخول إلى البريد المسجل.' : 'تم استلام الطلب. ستراجع الإدارة الطلب وتشارك رمز الدخول بعد اعتماده.' });
   });
 
   app.post('/api/admin/login', loginLimiter, async (req, res) => {
