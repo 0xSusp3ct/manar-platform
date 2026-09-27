@@ -11,7 +11,9 @@ process.env.TOKEN_SECRET='browser-tests-secret-not-for-production-2026'; process
 process.env.ADMIN_EMAIL='browser@example.test'; process.env.ADMIN_PASSWORD='Browser-testing-only-2026';
 const app=await createApp({databasePath:':memory:'}); const server=app.listen(0,'127.0.0.1'); await new Promise(r=>server.once('listening',r));
 const base=`http://127.0.0.1:${server.address().port}`; process.env.BASE_URL=base;
-const browser=await chromium.launch({headless:true, executablePath:process.env.BROWSER_EXECUTABLE || 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe'});
+const defaultWindowsBrowser='C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe';
+const browserExecutable=process.env.BROWSER_EXECUTABLE || (process.platform==='win32' && fs.existsSync(defaultWindowsBrowser) ? defaultWindowsBrowser : '');
+const browser=await chromium.launch({headless:true, ...(browserExecutable ? {executablePath:browserExecutable} : {})});
 const failures=[], checks=[];
 const context=await browser.newContext({viewport:{width:1440,height:1000},reducedMotion:'reduce',permissions:['clipboard-read','clipboard-write']});
 context.setDefaultTimeout(20000);
