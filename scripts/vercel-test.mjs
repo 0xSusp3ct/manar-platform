@@ -251,6 +251,11 @@ try {
   assert.equal(out.response.status, 200);
   assert.deepEqual([...out.data.slice(0, 4)], [0x50, 0x4b, 0x03, 0x04]);
 
+  out = await call(`/api/admin/results/${resultId}/share-link`, { method: "POST", cookie: adminCookie, rawBody: "{bad" });
+  assert.equal(out.response.status, 400);
+  assert.match(out.data.error, /صيغة/);
+  assert.equal((await call(`/api/reports/${token}`)).response.status, 200, "A rejected share request must preserve the current report link");
+
   out = await call(`/api/admin/results/${resultId}/share-link`, { method: "POST", cookie: adminCookie, body: { sendEmail: true } });
   assert.equal(out.response.status, 200);
   assert.equal(out.data.emailDelivery.sent, true);
@@ -317,7 +322,7 @@ try {
     testDatabase.prepare = originalPrepare;
   }
 
-  console.log("Vercel adapter test passed: awaited error handling, staged email issuance and recovery, concurrent-submit conflict handling, encrypted reveal, role separation, XLSX, link rotation, and reversible result archive.");
+  console.log("Vercel adapter test passed: awaited error handling, staged email issuance and recovery, concurrent-submit conflict handling, encrypted reveal, role separation, XLSX, rejected-request link preservation, link rotation, and reversible result archive.");
 } finally {
   closeDatabaseForTests?.();
   globalThis.fetch = originalFetch;

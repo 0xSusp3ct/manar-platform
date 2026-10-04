@@ -516,13 +516,13 @@ async function adminUserStatus(request, env, id) {
 
 async function adminShareLink(request, env, id, origin) {
   const auth = await requireAdmin(request, env); if (auth.response) return auth.response;
+  const body = await bodyJson(request);
   const row = await first(env.DB, `SELECT x.id, x.entity_json, r.email FROM results x JOIN access_codes c ON c.id = x.access_code_id LEFT JOIN requests r ON r.id = c.request_id WHERE x.id = ? AND x.archived_at IS NULL`, id);
   if (!row) return json({ error: "النتيجة غير موجودة." }, 404);
   const token = randomToken();
   const changed = await run(env.DB, "UPDATE results SET report_token_hash = ?, updated_at = ? WHERE id = ? AND archived_at IS NULL", await tokenHash(env, "report", token), now(), id);
   if (!changed.meta.changes) return json({ error: "النتيجة غير موجودة." }, 404);
   const reportUrl = `${origin}/r/${token}`;
-  const body = await bodyJson(request);
   const delivery = body.sendEmail && row.email ? await sendReportLink(env, { to: row.email, entityName: JSON.parse(row.entity_json).entityName, reportUrl }) : { sent: false, reason: 'skipped' };
   return json({ ok: true, reportUrl, emailDelivery: delivery });
 }
