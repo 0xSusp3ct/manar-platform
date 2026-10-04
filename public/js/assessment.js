@@ -8,6 +8,15 @@ const ui = {
   message: document.getElementById('assessment-message'), reviewSummary: document.getElementById('review-summary'), confirm: document.getElementById('confirm-submit')
 };
 
+// Official wording from the approved Manar methodology guide (five-level maturity model).
+const fallbackMaturityLevels = {
+  1: { label: 'غير مفعّل', description: 'العمل بدائي أو غائب، يعتمد كلياً على الاجتهاد الشخصي، لا يوجد نظام.' },
+  2: { label: 'ناشئ', description: 'توجد بدايات وعي ومحاولات للتوثيق، لكن التنفيذ ما زال ضعيفاً أو متقطعاً.' },
+  3: { label: 'مفعّل', description: 'النظام موجود ومطبق بشكل روتيني جيد، وموثق بإجراءات واضحة.' },
+  4: { label: 'مُقاس', description: 'التطبيق يتم بكفاءة عالية، وتوجد آليات لقياس الأداء، وقرارات مبنية على البيانات.' },
+  5: { label: 'متميز', description: 'ممارسة إبداعية تفوق التوقعات، وتعتبر المؤسسة "بيت خبرة" ومرجعية للآخرين.' }
+};
+
 let meta;
 let axes = [];
 let answers = {};
@@ -112,23 +121,71 @@ function renderAxis(axis) {
     const title = document.createElement('h3'); title.textContent = indicator.title;
     const description = document.createElement('p'); description.textContent = indicator.description;
     copy.append(title, description); head.append(number, copy); card.append(head);
-    const rating = document.createElement('div'); rating.className = 'rating'; rating.setAttribute('role', 'radiogroup'); rating.setAttribute('aria-label', `تقييم ${indicator.title}`);
+    const detailId = `rating-detail-${indicator.id}`;
+    const rating = document.createElement('div'); rating.className = 'rating'; rating.setAttribute('role', 'radiogroup'); rating.setAttribute('aria-label', `تقييم ${indicator.title}`); rating.setAttribute('aria-describedby', detailId);
     for (let score = 1; score <= 5; score += 1) {
-      const button = document.createElement('button'); button.type = 'button'; button.textContent = formatNumber(score);
+      const level = maturityLevel(score);
+      const button = document.createElement('button'); button.type = 'button'; button.dataset.score = String(score);
+      const scoreText = document.createElement('span'); scoreText.className = 'rating-score'; scoreText.textContent = formatNumber(score);
+      const labelText = document.createElement('span'); labelText.className = 'rating-label'; labelText.textContent = level.label;
+      button.append(scoreText, labelText);
       button.setAttribute('role', 'radio'); button.setAttribute('aria-checked', String(answers[indicator.id] === score));
-      button.title = meta.maturityLabels[score].label;
+      button.setAttribute('aria-label', `الدرجة ${formatNumber(score)}: ${level.label}`);
+      button.title = `${level.label}: ${level.description}`;
+      button.tabIndex = answers[indicator.id] ? (answers[indicator.id] === score ? 0 : -1) : (score === 1 ? 0 : -1);
       if (answers[indicator.id] === score) button.classList.add('selected');
-      button.addEventListener('click', () => {
-        answers[indicator.id] = score;
-        card.classList.add('answered');
-        [...rating.children].forEach((item, index) => { item.classList.toggle('selected', index + 1 === score); item.setAttribute('aria-checked', String(index + 1 === score)); });
-        changed();
+      button.addEventListener('click', () => selectRating(indicator.id, score, card, rating, detail));
+      button.addEventListener('keydown', (event) => {
+        let nextScore;
+        if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') nextScore = Math.min(5, score + 1);
+        if (event.key === 'ArrowRight' || event.key === 'ArrowDown') nextScore = Math.max(1, score - 1);
+        if (event.key === 'Home') nextScore = 1;
+        if (event.key === 'End') nextScore = 5;
+        if (!nextScore) return;
+        event.preventDefault();
+        selectRating(indicator.id, nextScore, card, rating, detail, true);
       });
       rating.append(button);
     }
-    const legend = document.createElement('div'); legend.className = 'rating-legend'; legend.innerHTML = '<span>١ - غير مفعّل</span><span>٥ - متميز</span>';
-    card.append(rating, legend); ui.questionList.append(card);
+    const legend = document.createElement('div'); legend.className = 'rating-legend';
+    const legendHint = document.createElement('span'); legendHint.textContent = 'اختر درجة لعرض وصفها الرسمي';
+    const legendRange = document.createElement('span'); legendRange.textContent = '١ غير مفعّل ← ٥ متميز';
+    legend.append(legendHint, legendRange);
+    const detail = document.createElement('div'); detail.className = 'rating-detail'; detail.id = detailId; detail.setAttribute('role', 'status'); detail.setAttribute('aria-live', 'polite');
+    const detailHeading = document.createElement('strong'); detailHeading.className = 'rating-detail-heading';
+    const detailDescription = document.createElement('span'); detailDescription.className = 'rating-detail-description';
+    detail.append(detailHeading, detailDescription);
+    if (answers[indicator.id]) updateRatingDetail(detail, answers[indicator.id]); else detail.classList.add('is-empty');
+    card.append(rating, legend, detail); ui.questionList.append(card);
   }
+}
+
+function selectRating(indicatorId, score, card, rating, detail, moveFocus = false) {
+  const changedScore = answers[indicatorId] !== score;
+  answers[indicatorId] = score;
+  card.classList.add('answered');
+  [...rating.querySelectorAll('button')].forEach((item) => {
+    const selected = Number(item.dataset.score) === score;
+    item.classList.toggle('selected', selected);
+    item.setAttribute('aria-checked', String(selected));
+    item.tabIndex = selected ? 0 : -1;
+    if (selected && moveFocus) item.focus();
+  });
+  updateRatingDetail(detail, score);
+  if (changedScore) changed();
+}
+
+function updateRatingDetail(detail, score) {
+  const level = maturityLevel(score);
+  detail.classList.remove('is-empty');
+  detail.querySelector('.rating-detail-heading').textContent = `الدرجة ${formatNumber(score)} — ${level.label}`;
+  detail.querySelector('.rating-detail-description').textContent = level.description;
+}
+
+function maturityLevel(score) {
+  const serverLevel = meta?.maturityLabels?.[score];
+  if (serverLevel) return { label: serverLevel.label, description: serverLevel.detail };
+  return fallbackMaturityLevels[score];
 }
 
 function validateEntity() {

@@ -17,6 +17,7 @@ export const SCHEMA_STATEMENTS = [
     label TEXT,
     code_hash TEXT NOT NULL,
     code_last4 TEXT NOT NULL,
+    code_ciphertext TEXT,
     status TEXT DEFAULT 'active' NOT NULL,
     expires_at TEXT,
     claimed_at TEXT,
@@ -58,6 +59,7 @@ export const SCHEMA_STATEMENTS = [
     report_token_hash TEXT NOT NULL,
     recommendations TEXT DEFAULT '' NOT NULL,
     improvement_plan TEXT DEFAULT '' NOT NULL,
+    archived_at TEXT,
     submitted_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     FOREIGN KEY (access_code_id) REFERENCES access_codes(id)

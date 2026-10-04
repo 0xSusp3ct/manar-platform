@@ -7,14 +7,14 @@
   <script src="/js/site.js" defer></script>
 </head>
 <body>
-  <header class="site-header"><nav class="nav"><a class="brand" href="/"><span class="brand-mark">م</span><span class="brand-copy">مقياس منار<small>للتميز التربوي المؤسسي</small></span></a><a class="button button-small button-outline" href="/">الصفحة الرئيسية</a></nav></header>
+  <header class="site-header"><nav class="nav" aria-label="التنقل الرئيسي"><a class="brand" href="/"><img class="brand-logo" src="/assets/manar-rakaez-wordmark.svg" alt="مقياس منار، شركة ركائز المدينة للاستشارات التعليمية والتربوية"></a><a class="button button-small button-outline" href="/">الصفحة الرئيسية</a></nav></header>
   <main class="form-shell">
     <section class="form-card">
       <span class="eyebrow">دخول مخصص للجهة</span>
       <h1>أدخل رمز الدعوة</h1>
       <p class="muted">يُستخدم الرمز مرة واحدة لفتح جلسة تقييم آمنة. بعد الإرسال النهائي لا يمكن تعديل الإجابات.</p>
       <form data-access-form>
-        <div class="field"><label for="code">رمز الدخول</label><input id="code" class="ltr" name="code" type="text" autocomplete="one-time-code" placeholder="MNR-XXXX-XXXX-XXXX" aria-describedby="code-message" required></div>
+        <div class="field"><label for="code">رمز الدخول</label><input id="code" class="ltr" name="code" type="text" autocomplete="one-time-code" placeholder="MNR-XXXX-XXXX-XXXX" aria-describedby="code-helper code-message" required><small class="code-helper" id="code-helper">الصق الرمز كاملًا كما وصلك بالبريد؛ رموز المنصة الجديدة تبدأ بـ MNR-.</small></div>
         <button class="button button-dark" type="submit">متابعة إلى التقييم</button>
         <div class="notice hidden" id="code-message" data-form-message role="status" aria-live="polite"></div>
       </form>

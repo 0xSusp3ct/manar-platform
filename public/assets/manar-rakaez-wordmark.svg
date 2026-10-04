@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 104" role="img" aria-labelledby="title description">
+  <title id="title">مقياس منار وشركة ركائز المدينة</title>
+  <desc id="description">هوية نصية مؤقتة لحين استلام الشعار الرسمي المعتمد</desc>
+  <rect x="1" y="1" width="358" height="102" rx="18" fill="#f8fbfd" stroke="#d8e3e9" stroke-width="2"/>
+  <rect x="270" y="12" width="76" height="76" rx="20" fill="#344a5c"/>
+  <path d="M288 66h40M294 54h28M301 42h14" fill="none" stroke="#d9e7ee" stroke-width="7" stroke-linecap="round"/>
+  <circle cx="308" cy="29" r="5" fill="#8baabd"/>
+  <text x="252" y="47" text-anchor="start" direction="rtl" fill="#2b4052" font-family="Tahoma, Arial, sans-serif" font-size="27" font-weight="700">مقياس منار</text>
+  <text x="252" y="75" text-anchor="start" direction="rtl" fill="#526979" font-family="Tahoma, Arial, sans-serif" font-size="9.5">شركة ركائز المدينة للاستشارات التعليمية والتربوية</text>
+</svg>

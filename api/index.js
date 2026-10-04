@@ -69,13 +69,33 @@ function normalizeRunResult(result) {
 async function ensureSchema() {
   getDatabase();
   if (!schemaReady) {
-    schemaReady = client.batch(SCHEMA_STATEMENTS.map((sql) => ({ sql, args: [] })), "write")
+    schemaReady = (async () => {
+      await client.batch(SCHEMA_STATEMENTS.map((sql) => ({ sql, args: [] })), "write");
+      await ensureColumn("access_codes", "code_ciphertext", "TEXT");
+      await ensureColumn("results", "archived_at", "TEXT");
+      await client.execute("CREATE INDEX IF NOT EXISTS results_archived_at_index ON results (archived_at)");
+    })()
       .catch((error) => {
         schemaReady = undefined;
         throw error;
       });
   }
   await schemaReady;
+}
+
+async function ensureColumn(table, column, definition) {
+  const hasColumn = async () => {
+    const result = await client.execute(`PRAGMA table_info(${table})`);
+    return result.rows.some((row) => String(row.name ?? row[1]) === column);
+  };
+  if (await hasColumn()) return;
+  try {
+    await client.execute(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+  } catch (error) {
+    // Two cold starts can race to apply the same migration. Only suppress the
+    // error when a fresh schema read confirms that the column now exists.
+    if (!(await hasColumn())) throw error;
+  }
 }
 
 export function closeDatabaseForTests() {
@@ -85,13 +105,18 @@ export function closeDatabaseForTests() {
   schemaReady = undefined;
 }
 
+export function getDatabaseForTests() {
+  if (process.env.NODE_ENV !== "test") throw new Error("Test database access is disabled outside tests");
+  return getDatabase();
+}
+
 export const maxDuration = 30;
 
 export default {
   async fetch(request) {
     try {
       await ensureSchema();
-      return worker.fetch(request, {
+      return await worker.fetch(request, {
         DB: getDatabase(),
         TOKEN_SECRET: process.env.TOKEN_SECRET,
         ADMIN_EMAIL: process.env.ADMIN_EMAIL,

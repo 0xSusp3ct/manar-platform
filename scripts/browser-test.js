@@ -36,7 +36,9 @@ try {
     assert.equal(await page.locator('#hero-code').getAttribute('aria-invalid'),null);
   });
   await check('Request form and desktop home',async()=>{
-    await noOverflow(page,'home desktop'); await page.screenshot({path:path.join(output,'home-desktop.png')});
+    await noOverflow(page,'home desktop');
+    assert.equal(await page.locator('.brand-logo').first().evaluate(image=>image.complete&&image.naturalWidth>0),true,'home wordmark loaded');
+    await page.screenshot({path:path.join(output,'home-desktop.png')});
     const form=page.locator('#request-form');
     await form.locator('[name=entityName]').fill('أكاديمية الإبداع - نموذج تجريبي');
     await form.locator('[name=assessorName]').fill('فريق الجودة التجريبي');
@@ -61,12 +63,23 @@ try {
   await check('Owner approves request and issues code',async()=>{
     const response=admin.waitForResponse(r=>r.url().includes('/approve')&&r.request().method()==='POST');
     await admin.locator('[data-action=approve]').click(); code=(await (await response).json()).accessCode; assert.match(code,/^MNR-/);
+    await admin.locator('#revealed-access-code').waitFor(); assert.equal(await admin.locator('#revealed-access-code').inputValue(),code);
+    await admin.locator('#copy-access-code').click(); assert.equal(await admin.evaluate(()=>navigator.clipboard.readText()),code);
+    await admin.locator('#close-drawer').click();
   });
   await page.goto(base+'/enter.html'); await page.locator('#code').fill(code); await page.locator('button[type=submit]').click();
   await page.locator('#entityName').waitFor();
   await check('Metadata validation',async()=> { await page.locator('#next-step').click(); await page.getByText('أكمل بيانات الجهة والتقييم قبل المتابعة.').waitFor(); });
   await page.locator('#entityName').fill('أكاديمية الإبداع - نموذج تجريبي'); await page.locator('#assessorName').fill('فريق الجودة التجريبي'); await page.locator('#evaluationDate').fill('2026-09-13');
   await page.locator('#next-step').click(); await page.locator('#axis-title').waitFor();
+  await check('Rating click and keyboard expose the official written descriptor',async()=>{
+    const first=page.locator('.question').first(); const buttons=first.locator('.rating button');
+    await buttons.nth(1).click();
+    assert.match(await first.locator('.rating-detail-heading').innerText(),/الدرجة ٢.*ناشئ/);
+    assert.match(await first.locator('.rating-detail-description').innerText(),/بدايات وعي ومحاولات للتوثيق/);
+    await buttons.nth(1).press('ArrowLeft');
+    assert.match(await first.locator('.rating-detail-heading').innerText(),/الدرجة ٣.*مفعّل/);
+  });
   await check('Incomplete axis stays on current step',async()=>{ await page.locator('#next-step').click(); assert.match(await page.locator('#assessment-message').innerText(),/أجب عن جميع/); });
   let indicatorIndex=0;
   for(let axis=0;axis<10;axis++) {
@@ -111,6 +124,28 @@ try {
     await admin.getByText('حُفظت التوصيات وخطة التحسين.').waitFor();
     await page.reload(); await page.waitForFunction(()=>document.documentElement.dataset.reportReady==='true');
     assert.match(await page.locator('#supervisor-recommendations').innerText(),/مؤشرات أثر/);
+  });
+  await check('Owner can reveal the stored code explicitly after issuance',async()=>{
+    await admin.locator('[data-section=codes]').click(); await admin.locator('[data-action=reveal-code]').first().click();
+    assert.equal(await admin.locator('#revealed-access-code').inputValue(),code); await admin.locator('#close-drawer').click();
+  });
+  await check('Delete moves a result to the recycle bin and restore returns it safely',async()=>{
+    await admin.locator('[data-section=results]').click();
+    admin.once('dialog',dialog=>dialog.accept()); await admin.locator('[data-action=archive-result]').click();
+    await admin.getByText('نُقلت النتيجة إلى السلة، ويمكن استعادتها عند الحاجة.').waitFor();
+    const reportToken = new URL(reportUrl).pathname.split('/').pop();
+    assert.equal((await context.request.get(`${base}/api/reports/${reportToken}`)).status(),404,'archived report data is blocked');
+    await admin.locator('[data-section=archived]').click(); await admin.locator('[data-action=restore-result]').waitFor();
+    admin.once('dialog',dialog=>dialog.accept()); await admin.locator('[data-action=restore-result]').click();
+    await admin.getByText('تمت استعادة النتيجة بنجاح.').waitFor();
+    assert.equal((await context.request.get(`${base}/api/reports/${reportToken}`)).status(),200,'restored report data works again');
+    await admin.locator('[data-section=results]').click(); await admin.locator('[data-action=result-details]').waitFor();
+  });
+  await check('Every print page has a decoded raster wordmark',async()=>{
+    const pages=await page.locator('.print-page').count();
+    const logos=page.locator('#report-pages img');
+    assert.equal(await logos.count(),pages+1,'cover has an additional wordmark');
+    assert.equal(await logos.evaluateAll(images=>images.every(image=>image.complete&&image.naturalWidth>0&&image.currentSrc.startsWith('data:image/png;base64,'))),true);
   });
   await check('Responsive report: 1440, 768, 390 and 320 pixels',async()=>{
     for(const width of [1440,768,390,320]) {

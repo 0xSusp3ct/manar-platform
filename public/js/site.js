@@ -34,9 +34,15 @@ document.querySelectorAll('[data-access-form]').forEach((form) => {
 
 const requestForm = document.getElementById('request-form');
 const deliveryNote = document.getElementById('request-delivery-note');
+const requestSubmit = document.getElementById('request-submit');
 if (deliveryNote) {
   api('/api/config').then(({ emailReady }) => {
-    if (emailReady) deliveryNote.textContent = 'بعد مراجعة الطلب، ترسل الإدارة رمز الدخول إلى البريد المسجل. لن تظهر إجابات التقييم في الرابط.';
+    if (emailReady) {
+      deliveryNote.textContent = 'عند نجاح التسجيل، يُرسل رمز الدخول فورًا إلى البريد الإلكتروني المسجل. لن تظهر إجابات التقييم في الرابط.';
+      if (requestSubmit) requestSubmit.textContent = 'التسجيل وإرسال رمز الدخول';
+    } else {
+      deliveryNote.textContent = 'يُسجل الطلب فورًا ليتابعه مسؤول المقياس ويزوّد الجهة بالرمز عبر قناة آمنة. لن تظهر إجابات التقييم في الرابط.';
+    }
   }).catch(() => {});
 }
 if (requestForm) {

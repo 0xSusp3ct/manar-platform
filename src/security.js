@@ -3,6 +3,7 @@ import { promisify } from 'node:util';
 
 const scrypt = promisify(crypto.scrypt);
 const fallbackSecret = crypto.randomBytes(32).toString('hex');
+const accessCodeCipherVersion = 'v1';
 
 export function tokenSecret() {
   const configured = process.env.TOKEN_SECRET;
@@ -26,6 +27,42 @@ export function createAccessCode() {
 
 export function hashToken(purpose, value) {
   return crypto.createHmac('sha256', tokenSecret()).update(`${purpose}:${value}`).digest('hex');
+}
+
+export function encryptAccessCode(value) {
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', accessCodeEncryptionKey(), iv);
+  const encrypted = Buffer.concat([cipher.update(String(value), 'utf8'), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return [accessCodeCipherVersion, iv.toString('base64url'), Buffer.concat([encrypted, tag]).toString('base64url')].join('.');
+}
+
+export function decryptAccessCode(value) {
+  if (!value) return null;
+  try {
+    const [version, ivValue, encryptedValue, ...extra] = String(value).split('.');
+    if (version !== accessCodeCipherVersion || !ivValue || !encryptedValue || extra.length) return null;
+    const iv = decodeBase64Url(ivValue);
+    const encryptedWithTag = decodeBase64Url(encryptedValue);
+    if (!iv || !encryptedWithTag || iv.length !== 12 || encryptedWithTag.length < 17) return null;
+    const encrypted = encryptedWithTag.subarray(0, -16);
+    const tag = encryptedWithTag.subarray(-16);
+    const decipher = crypto.createDecipheriv('aes-256-gcm', accessCodeEncryptionKey(), iv);
+    decipher.setAuthTag(tag);
+    return Buffer.concat([decipher.update(encrypted), decipher.final()]).toString('utf8');
+  } catch {
+    return null;
+  }
+}
+
+function accessCodeEncryptionKey() {
+  return crypto.createHash('sha256').update(`manar-access-code-v1:${tokenSecret()}`, 'utf8').digest();
+}
+
+function decodeBase64Url(value) {
+  if (!/^[A-Za-z0-9_-]+$/.test(value)) return null;
+  const decoded = Buffer.from(value, 'base64url');
+  return decoded.toString('base64url') === value ? decoded : null;
 }
 
 export function normalizeCode(value) {

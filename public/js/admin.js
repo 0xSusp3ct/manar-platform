@@ -3,7 +3,7 @@ let drawerReturnFocus = null;
 const ui = {
   login: document.getElementById('admin-login'), app: document.getElementById('admin-app'), loginForm: document.getElementById('login-form'),
   loginMessage: document.getElementById('login-message'), message: document.getElementById('admin-message'), title: document.getElementById('admin-section-title'),
-  requestsBody: document.getElementById('requests-body'), codesBody: document.getElementById('codes-body'), resultsBody: document.getElementById('results-body'), usersBody: document.getElementById('users-body'),
+  requestsBody: document.getElementById('requests-body'), codesBody: document.getElementById('codes-body'), resultsBody: document.getElementById('results-body'), archivedResultsBody: document.getElementById('archived-results-body'), usersBody: document.getElementById('users-body'),
   pendingCount: document.getElementById('pending-count'), activeCount: document.getElementById('active-count'), resultCount: document.getElementById('result-count'),
   drawer: document.getElementById('admin-drawer'), drawerTitle: document.getElementById('drawer-title'), drawerContent: document.getElementById('drawer-content')
 };
@@ -52,8 +52,9 @@ async function loadOverview() {
 
 function render() {
   const { requests, codes, results, users, currentUser } = state.data;
+  const archivedResults = state.data.archivedResults || [];
   const owner = currentUser.role === 'owner';
-  document.querySelectorAll('[data-section="requests"], [data-section="codes"], [data-section="users"]').forEach((button) => button.classList.toggle('hidden', !owner));
+  document.querySelectorAll('[data-section="requests"], [data-section="codes"], [data-section="archived"], [data-section="users"]').forEach((button) => button.classList.toggle('hidden', !owner));
   document.getElementById('new-code').classList.toggle('hidden', !owner);
   document.getElementById('add-supervisor').classList.toggle('hidden', !owner);
   if (!owner && state.section !== 'results') setSection('results');
@@ -62,22 +63,34 @@ function render() {
   ui.resultCount.textContent = number(results.length);
   ui.requestsBody.innerHTML = requests.length ? requests.map(requestRow).join('') : emptyRow(6, 'لا توجد طلبات بعد.');
   ui.codesBody.innerHTML = codes.length ? codes.map(codeRow).join('') : emptyRow(6, 'لا توجد رموز دخول.');
-  ui.resultsBody.innerHTML = results.length ? results.map(resultRow).join('') : emptyRow(5, 'لا توجد نتائج مكتملة.');
+  ui.resultsBody.innerHTML = results.length ? results.map((row) => resultRow(row, owner)).join('') : emptyRow(5, 'لا توجد نتائج مكتملة.');
+  ui.archivedResultsBody.innerHTML = owner && archivedResults.length ? archivedResults.map(archivedResultRow).join('') : emptyRow(6, 'لا توجد نتائج محذوفة في السلة.');
   ui.usersBody.innerHTML = users.length ? users.map(userRow).join('') : emptyRow(5, 'لا توجد حسابات إضافية.');
 }
 
 function requestRow(row) {
-  return `<tr><td><strong>${escapeHtml(row.entity_name)}</strong>${row.notes ? `<br><span class="small muted">${escapeHtml(row.notes)}</span>` : ''}</td><td>${escapeHtml(row.assessor_name)}</td><td><span class="ltr">${escapeHtml(row.email)}</span>${row.phone ? `<br><span class="ltr small">${escapeHtml(row.phone)}</span>` : ''}</td><td>${status(row.status)}</td><td>${date(row.created_at)}</td><td><div class="table-actions">${row.status !== 'approved' ? `<button class="button button-small button-primary" data-action="approve" data-id="${row.id}">اعتماد وإصدار رمز</button>` : ''}${row.status !== 'rejected' ? `<button class="button button-small button-danger" data-action="reject" data-id="${row.id}">رفض</button>` : `<button class="button button-small button-outline" data-action="pending" data-id="${row.id}">إعادة للمراجعة</button>`}</div></td></tr>`;
+  const actions = row.status === 'pending'
+    ? `<button class="button button-small button-primary" data-action="approve" data-id="${row.id}">اعتماد وإصدار رمز</button><button class="button button-small button-danger" data-action="reject" data-id="${row.id}">رفض</button>`
+    : row.status === 'rejected'
+      ? `<button class="button button-small button-outline" data-action="pending" data-id="${row.id}">إعادة للمراجعة</button>`
+      : '<span class="small muted">لا يوجد إجراء مطلوب</span>';
+  return `<tr><td><strong>${escapeHtml(row.entity_name)}</strong>${row.notes ? `<br><span class="small muted">${escapeHtml(row.notes)}</span>` : ''}</td><td>${escapeHtml(row.assessor_name)}</td><td><span class="ltr">${escapeHtml(row.email)}</span>${row.phone ? `<br><span class="ltr small">${escapeHtml(row.phone)}</span>` : ''}</td><td>${status(row.status)}</td><td>${date(row.created_at)}</td><td><div class="table-actions">${actions}</div></td></tr>`;
 }
 
 function codeRow(row) {
   const nextStatus = row.status === 'active' ? 'stopped' : 'active';
   const button = row.status === 'used' ? '' : `<button class="button button-small ${row.status === 'active' ? 'button-danger' : 'button-outline'}" data-action="code-status" data-id="${row.id}" data-status="${nextStatus}">${row.status === 'active' ? 'إيقاف' : 'تفعيل'}</button>`;
-  return `<tr><td>${escapeHtml(row.entity_name || row.label || 'رمز مستقل')}<br><span class="small muted ltr">${escapeHtml(row.email || '')}</span></td><td class="ltr">•••• ${escapeHtml(row.code_last4)}</td><td>${status(row.status)}</td><td>${row.expires_at ? date(row.expires_at) : '-'}</td><td>${date(row.created_at)}</td><td><div class="table-actions">${button}</div></td></tr>`;
+  const reveal = `<button class="button button-small button-light" data-action="reveal-code" data-id="${row.id}" aria-label="إظهار ونسخ رمز الدخول المنتهي بالأرقام ${escapeHtml(row.code_last4)}">إظهار ونسخ الرمز</button>`;
+  return `<tr><td>${escapeHtml(row.entity_name || row.label || 'رمز مستقل')}<br><span class="small muted ltr">${escapeHtml(row.email || '')}</span></td><td><span class="ltr code-last-four">•••• ${escapeHtml(row.code_last4)}</span><br>${reveal}</td><td>${status(row.status)}</td><td>${row.expires_at ? date(row.expires_at) : '-'}</td><td>${date(row.created_at)}</td><td><div class="table-actions">${button}</div></td></tr>`;
 }
 
-function resultRow(row) {
-  return `<tr><td><strong>${escapeHtml(row.entity.entityName)}</strong><br><span class="small muted">${escapeHtml(row.entity.assessorName)}</span></td><td>${number(row.result.overallPercent)}٪<br><span class="small muted">${number(row.result.rawPoints)} / ${number(row.result.maxPoints)}</span></td><td>${escapeHtml(row.result.maturity)}</td><td>${date(row.submitted_at)}</td><td><div class="table-actions"><button class="button button-small button-outline" data-action="result-details" data-id="${row.id}">التوصيات والمشاركة</button><a class="button button-small button-light" href="/api/admin/results/${row.id}/export.xlsx">Excel</a></div></td></tr>`;
+function resultRow(row, owner) {
+  const archive = owner ? `<button class="button button-small button-danger" data-action="archive-result" data-id="${row.id}">حذف النتيجة</button>` : '';
+  return `<tr><td><strong>${escapeHtml(row.entity.entityName)}</strong><br><span class="small muted">${escapeHtml(row.entity.assessorName)}</span></td><td>${number(row.result.overallPercent)}٪<br><span class="small muted">${number(row.result.rawPoints)} / ${number(row.result.maxPoints)}</span></td><td>${escapeHtml(row.result.maturity)}</td><td>${date(row.submitted_at)}</td><td><div class="table-actions"><button class="button button-small button-outline" data-action="result-details" data-id="${row.id}">التوصيات والمشاركة</button><a class="button button-small button-light" href="/api/admin/results/${row.id}/export.xlsx">Excel</a>${archive}</div></td></tr>`;
+}
+
+function archivedResultRow(row) {
+  return `<tr><td><strong>${escapeHtml(row.entity.entityName)}</strong><br><span class="small muted">${escapeHtml(row.entity.assessorName)}</span></td><td>${number(row.result.overallPercent)}٪<br><span class="small muted">${number(row.result.rawPoints)} / ${number(row.result.maxPoints)}</span></td><td>${escapeHtml(row.result.maturity)}</td><td>${date(row.submitted_at)}</td><td>${date(row.archived_at)}</td><td><button class="button button-small button-primary" data-action="restore-result" data-id="${row.id}">استعادة النتيجة</button></td></tr>`;
 }
 
 function userRow(row) {
@@ -95,11 +108,23 @@ async function handleAction(event) {
     if (action === 'approve') {
       const result = await api(`/api/admin/requests/${id}/approve`, { method: 'POST', body: { sendEmail: true, expiresInDays: 14 } });
       const emailNote = result.emailDelivery?.sent ? ' وتم إرساله بالبريد.' : result.emailDelivery?.reason === 'not_configured' ? ' خدمة البريد غير مهيأة؛ انسخ الرمز وشاركه مع الجهة عبر قناة آمنة.' : ' لم يتأكد إرسال البريد؛ انسخ الرمز وشاركه مع الجهة عبر قناة آمنة.';
-      show(ui.message, `رمز الدخول: ${result.accessCode}.${emailNote} انسخه الآن؛ لن يظهر كاملًا مرة أخرى.`, 'success'); await loadOverview();
+      await loadOverview(); showAccessCode(result.accessCode, `تم اعتماد الطلب.${emailNote}`);
     }
     if (action === 'reject' && window.confirm('هل تريد رفض هذا الطلب؟')) { await api(`/api/admin/requests/${id}/status`, { method: 'POST', body: { status: 'rejected' } }); await loadOverview(); }
     if (action === 'pending') { await api(`/api/admin/requests/${id}/status`, { method: 'POST', body: { status: 'pending' } }); await loadOverview(); }
     if (action === 'code-status') { await api(`/api/admin/codes/${id}/status`, { method: 'POST', body: { status: button.dataset.status } }); await loadOverview(); }
+    if (action === 'reveal-code') {
+      const result = await api(`/api/admin/codes/${id}/reveal`, { method: 'POST' });
+      showAccessCode(result.accessCode, 'يمكنك نسخ الرمز الكامل ومشاركته مع الجهة عبر قناة آمنة.');
+    }
+    if (action === 'archive-result' && window.confirm('هل تريد حذف هذه النتيجة؟ ستُنقل إلى سلة النتائج ويمكن للمالك استعادتها لاحقًا.')) {
+      await api(`/api/admin/results/${id}`, { method: 'DELETE' });
+      show(ui.message, 'نُقلت النتيجة إلى السلة، ويمكن استعادتها عند الحاجة.', 'success'); await loadOverview();
+    }
+    if (action === 'restore-result' && window.confirm('هل تريد إعادة هذه النتيجة إلى قائمة النتائج النشطة؟')) {
+      await api(`/api/admin/results/${id}/restore`, { method: 'POST' });
+      show(ui.message, 'تمت استعادة النتيجة بنجاح.', 'success'); await loadOverview();
+    }
     if (action === 'user-status') { await api(`/api/admin/users/${id}/status`, { method: 'POST', body: { active: button.dataset.active === 'true' } }); await loadOverview(); }
     if (action === 'result-details') openResult(id);
   } catch (error) { show(ui.message, error.message, 'error'); }
@@ -150,8 +175,7 @@ async function createManualCode() {
     const form = event.currentTarget; const button = form.querySelector('button[type="submit"]'); button.disabled = true;
     try {
       const result = await api('/api/admin/codes', { method: 'POST', body: { label: document.getElementById('manual-code-label').value.trim(), expiresInDays: 14 } });
-      show(document.getElementById('manual-code-message'), `الرمز الجديد: ${result.accessCode}. انسخه الآن؛ لن يظهر كاملًا مرة أخرى.`, 'success');
-      await loadOverview(); setSection('codes');
+      await loadOverview(); setSection('codes'); showAccessCode(result.accessCode, 'تم إنشاء الرمز المستقل. انسخه وشاركه مع الجهة عبر قناة آمنة.');
     } catch (error) { show(document.getElementById('manual-code-message'), error.message, 'error'); }
     finally { button.disabled = false; }
   });
@@ -175,11 +199,30 @@ async function createSupervisor() {
 
 function setSection(section) {
   state.section = section;
-  const titles = { requests: 'الطلبات', codes: 'رموز الدخول', results: 'النتائج', users: 'المستخدمون' };
+  const titles = { requests: 'الطلبات', codes: 'رموز الدخول', results: 'النتائج', archived: 'سلة النتائج', users: 'المستخدمون' };
   ui.title.textContent = titles[section];
   document.querySelectorAll('[data-section]').forEach((button) => button.classList.toggle('active', button.dataset.section === section));
   document.querySelectorAll('.admin-section').forEach((element) => element.classList.add('hidden'));
   document.getElementById(`${section}-section`).classList.remove('hidden');
+}
+
+function showAccessCode(accessCode, note) {
+  ui.drawerTitle.textContent = 'رمز الدخول الكامل';
+  ui.drawerContent.innerHTML = `<div class="access-code-panel"><p class="muted">${escapeHtml(note)}</p><label for="revealed-access-code">رمز الدخول</label><input id="revealed-access-code" class="access-code-value ltr" type="text" readonly value="${escapeHtml(accessCode)}"><div class="table-actions"><button class="button button-primary" id="copy-access-code" type="button">نسخ الرمز</button></div><div class="notice hidden" id="copy-access-code-message" role="status" aria-live="polite"></div></div>`;
+  showDrawer('#revealed-access-code');
+  const input = document.getElementById('revealed-access-code');
+  input.select();
+  document.getElementById('copy-access-code').addEventListener('click', async () => {
+    const message = document.getElementById('copy-access-code-message');
+    try {
+      if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(accessCode);
+      else { input.focus(); input.select(); if (!document.execCommand('copy')) throw new Error(); }
+      show(message, 'تم نسخ الرمز إلى الحافظة.', 'success');
+    } catch {
+      input.focus(); input.select();
+      show(message, 'تعذر النسخ التلقائي. الرمز محدد الآن؛ انسخه يدويًا.', 'error');
+    }
+  });
 }
 
 function showDrawer(firstFocus = '#close-drawer') {

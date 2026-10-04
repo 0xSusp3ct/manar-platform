@@ -12,6 +12,8 @@ process.env.TOKEN_SECRET = 'smoke-test-token-secret-1234567890-abcdef';
 process.env.ADMIN_EMAIL = 'owner@example.test';
 process.env.ADMIN_PASSWORD = 'StrongSmokePassword-2026';
 process.env.SCORING_PROFILE = 'current50';
+process.env.RESEND_API_KEY = '';
+process.env.RESEND_FROM = '';
 
 const app = await createApp({ databasePath });
 const server = app.listen(0, '127.0.0.1');
@@ -35,9 +37,18 @@ try {
 
   const overview = await request('/api/admin/overview', { jar: adminCookies });
   assert.equal(overview.data.requests.length, 1);
+  assert.deepEqual(overview.data.archivedResults, []);
 
   const approved = await request(`/api/admin/requests/${requested.data.requestId}/approve`, { method: 'POST', body: { sendEmail: false }, jar: adminCookies });
   assert.match(approved.data.accessCode, /^MNR-/);
+  const overviewAfterApproval = await request('/api/admin/overview', { jar: adminCookies });
+  const storedCode = overviewAfterApproval.data.codes.find((row) => row.request_id === requested.data.requestId);
+  assert.ok(storedCode);
+  assert.equal('accessCode' in storedCode, false);
+  assert.equal('access_code' in storedCode, false);
+  assert.equal('code_ciphertext' in storedCode, false);
+  const revealed = await request(`/api/admin/codes/${storedCode.id}/reveal`, { method: 'POST', jar: adminCookies });
+  assert.equal(revealed.data.accessCode, approved.data.accessCode);
 
   const entered = await request('/api/access', { method: 'POST', body: { code: approved.data.accessCode }, jar: assessmentCookies });
   assert.equal(entered.response.status, 200);
@@ -59,6 +70,7 @@ try {
   await request(`/api/admin/results/${submitted.data.resultId}/advisory`, { method: 'PATCH', body: { recommendations: 'توصية اختبارية', improvementPlan: 'خطة اختبارية' }, jar: adminCookies });
   const link = await request(`/api/admin/results/${submitted.data.resultId}/share-link`, { method: 'POST', body: { sendEmail: false }, jar: adminCookies });
   assert.match(link.data.reportUrl, /\/r\//);
+  const activeReportToken = new URL(link.data.reportUrl).pathname.split('/').pop();
 
   const excel = await request(`/api/admin/results/${submitted.data.resultId}/export.xlsx`, { jar: adminCookies, binary: true });
   assert.equal(excel.response.status, 200);
@@ -68,9 +80,30 @@ try {
   const supervisorOverview = await request('/api/admin/overview', { jar: supervisorCookies });
   assert.equal(supervisorOverview.data.requests.length, 0);
   assert.equal(supervisorOverview.data.results.length, 1);
+  assert.deepEqual(supervisorOverview.data.archivedResults, []);
   const forbidden = await rawRequest('/api/admin/codes', { method: 'POST', body: { label: 'غير مسموح' }, jar: supervisorCookies });
   assert.equal(forbidden.response.status, 403);
-  console.log('Smoke test passed: full journey, immutable result, report link, advisory, Excel export, and role separation.');
+  const forbiddenReveal = await rawRequest(`/api/admin/codes/${storedCode.id}/reveal`, { method: 'POST', jar: supervisorCookies });
+  assert.equal(forbiddenReveal.response.status, 403);
+  const forbiddenArchive = await rawRequest(`/api/admin/results/${submitted.data.resultId}`, { method: 'DELETE', jar: supervisorCookies });
+  assert.equal(forbiddenArchive.response.status, 403);
+
+  const archived = await request(`/api/admin/results/${submitted.data.resultId}`, { method: 'DELETE', jar: adminCookies });
+  assert.ok(archived.data.archivedAt);
+  const archivedOverview = await request('/api/admin/overview', { jar: adminCookies });
+  assert.equal(archivedOverview.data.results.length, 0);
+  assert.equal(archivedOverview.data.archivedResults.length, 1);
+  assert.equal((await rawRequest(`/api/reports/${activeReportToken}`)).response.status, 404);
+  assert.equal((await rawRequest(`/api/admin/results/${submitted.data.resultId}/advisory`, { method: 'PATCH', body: { recommendations: '', improvementPlan: '' }, jar: adminCookies })).response.status, 404);
+  assert.equal((await rawRequest(`/api/admin/results/${submitted.data.resultId}/share-link`, { method: 'POST', body: { sendEmail: false }, jar: adminCookies })).response.status, 404);
+  assert.equal((await rawRequest(`/api/admin/results/${submitted.data.resultId}/export.xlsx`, { jar: adminCookies })).response.status, 404);
+  const supervisorArchivedOverview = await request('/api/admin/overview', { jar: supervisorCookies });
+  assert.equal(supervisorArchivedOverview.data.results.length, 0);
+  assert.deepEqual(supervisorArchivedOverview.data.archivedResults, []);
+
+  await request(`/api/admin/results/${submitted.data.resultId}/restore`, { method: 'POST', jar: adminCookies });
+  assert.equal((await request(`/api/reports/${activeReportToken}`)).response.status, 200);
+  console.log('Smoke test passed: full journey, encrypted code reveal, immutable result, archive/restore, report controls, Excel export, and role separation.');
 } finally {
   await new Promise((resolve) => server.close(resolve));
   app.locals.db.close();

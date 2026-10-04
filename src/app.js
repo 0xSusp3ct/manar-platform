@@ -7,7 +7,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { openDatabase, seedOwner } from './db.js';
 import { calculateAssessment, getStructure, maturityLabels } from './assessment.js';
-import { createAccessCode, hashPassword, hashToken, normalizeCode, randomToken, safeMultilineValue, safePublicValue, verifyPassword } from './security.js';
+import { createAccessCode, decryptAccessCode, encryptAccessCode, hashPassword, hashToken, normalizeCode, randomToken, safeMultilineValue, safePublicValue, verifyPassword } from './security.js';
 import { emailReady, sendAccessCode, sendReportLink } from './email.js';
 import { createXlsxBuffer } from './xlsx.js';
 
@@ -24,7 +24,7 @@ const requestSchema = z.object({
 });
 
 const loginSchema = z.object({ email: z.string().trim().email(), password: z.string().min(1).max(300) });
-const accessSchema = z.object({ code: z.string().trim().min(8).max(40) });
+const invalidCodeMessage = 'رمز الدخول غير صالح. انسخ الرمز كاملًا من رسالة البريد (تبدأ الرموز الجديدة بـ MNR-) والصقه دون تعديل، وإن استمرت المشكلة فتواصل مع إدارة المقياس.';
 const draftSchema = z.object({
   entity: z.object({ entityName: z.string().trim().min(2).max(160), assessorName: z.string().trim().min(2).max(120), evaluationDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine((value) => { const date = new Date(value); return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value; }) }),
   answers: z.record(z.string(), z.number().int().min(1).max(5))
@@ -35,6 +35,8 @@ const userSchema = z.object({ email: z.string().trim().email().max(180), passwor
 export async function createApp(options = {}) {
   const app = express();
   const db = options.db || openDatabase(options.databasePath);
+  const mailer = options.emailService || { emailReady, sendAccessCode, sendReportLink };
+  const isEmailReady = () => Boolean(mailer.emailReady());
   await seedOwner(db);
   app.locals.db = db;
 
@@ -74,11 +76,11 @@ export async function createApp(options = {}) {
   app.get('/api/health', (_req, res) => res.json({ ok: true }));
   app.get('/api/config', (_req, res) => res.json({
     profile: scoringProfile(),
-    emailReady: emailReady(),
+    emailReady: isEmailReady(),
     brand: 'مقياس منار للتميز التربوي المؤسسي'
   }));
 
-  app.post('/api/requests', publicRequestLimiter, (req, res) => {
+  app.post('/api/requests', publicRequestLimiter, async (req, res) => {
     const data = parse(requestSchema, req.body);
     const now = new Date().toISOString();
     const result = db.prepare(`INSERT INTO requests (entity_name, assessor_name, email, phone, notes, status, created_at)
@@ -86,7 +88,38 @@ export async function createApp(options = {}) {
       safePublicValue(data.entityName, 160), safePublicValue(data.assessorName, 120), data.email.toLowerCase(),
       safePublicValue(data.phone, 32), safePublicValue(data.notes, 1200), now
     );
-    res.status(201).json({ ok: true, requestId: Number(result.lastInsertRowid), message: emailReady() ? 'تم استلام الطلب. بعد اعتماده سيصل رمز الدخول إلى البريد المسجل.' : 'تم استلام الطلب. ستراجع الإدارة الطلب وتشارك رمز الدخول بعد اعتماده.' });
+    const requestId = Number(result.lastInsertRowid);
+    let delivery = { sent: false, reason: 'not_configured' };
+    let issued = false;
+    if (isEmailReady()) {
+      const created = createCodeRecord(db, { requestId, label: safePublicValue(data.entityName, 160), expiresInDays: 14, status: 'stopped' });
+      try {
+        delivery = await mailer.sendAccessCode({
+          to: data.email.toLowerCase(), entityName: safePublicValue(data.entityName, 160), code: created.rawCode,
+          expiresAt: created.expiresAt, baseUrl: baseUrl(req)
+        });
+      } catch (error) {
+        console.error('Manar immediate access-code delivery failed', error?.name || 'delivery_failed');
+        delivery = { sent: false, reason: 'delivery_failed' };
+      }
+      if (delivery?.sent) {
+        issued = activateDeliveredCode(db, requestId, created.id);
+        if (!issued) {
+          discardUndeliveredCode(db, requestId, created.id);
+          delivery = { sent: false, reason: 'activation_failed' };
+        }
+      } else {
+        discardUndeliveredCode(db, requestId, created.id);
+        delivery = { sent: false, reason: delivery?.reason || 'delivery_failed' };
+      }
+    }
+    const persistedStatus = db.prepare('SELECT status FROM requests WHERE id = ?').get(requestId)?.status || 'pending';
+    const message = issued
+      ? 'تم استلام الطلب وإرسال رمز الدخول إلى البريد المسجل.'
+      : isEmailReady()
+        ? 'تم استلام الطلب، وتعذر إرسال الرمز تلقائيًا. ستراجع الإدارة الطلب وتتواصل مع الجهة.'
+        : 'تم استلام الطلب. ستراجع الإدارة الطلب وتشارك رمز الدخول بعد اعتماده.';
+    res.status(201).json({ ok: true, requestId, status: persistedStatus, emailDelivery: delivery, message });
   });
 
   app.post('/api/admin/login', loginLimiter, async (req, res) => {
@@ -117,23 +150,30 @@ export async function createApp(options = {}) {
     const codes = owner ? db.prepare(`SELECT c.id, c.request_id, c.label, c.code_last4, c.status, c.expires_at, c.claimed_at, c.used_at, c.created_at,
       r.entity_name, r.email FROM access_codes c LEFT JOIN requests r ON r.id = c.request_id ORDER BY c.created_at DESC LIMIT 200`).all() : [];
     const results = db.prepare(`SELECT x.id, x.access_code_id, x.profile, x.entity_json, x.result_json, x.recommendations, x.improvement_plan,
-      x.submitted_at, x.updated_at, r.email FROM results x JOIN access_codes c ON c.id = x.access_code_id
-      LEFT JOIN requests r ON r.id = c.request_id ORDER BY x.submitted_at DESC LIMIT 200`).all().map((row) => ({
-        ...row, entity: JSON.parse(row.entity_json), result: JSON.parse(row.result_json), entity_json: undefined, result_json: undefined
-      }));
+      x.submitted_at, x.updated_at, x.archived_at, r.email FROM results x JOIN access_codes c ON c.id = x.access_code_id
+      LEFT JOIN requests r ON r.id = c.request_id WHERE x.archived_at IS NULL ORDER BY x.submitted_at DESC LIMIT 200`).all().map(serializeResultRow);
+    const archivedResults = owner ? db.prepare(`SELECT x.id, x.access_code_id, x.profile, x.entity_json, x.result_json, x.recommendations, x.improvement_plan,
+      x.submitted_at, x.updated_at, x.archived_at, r.email FROM results x JOIN access_codes c ON c.id = x.access_code_id
+      LEFT JOIN requests r ON r.id = c.request_id WHERE x.archived_at IS NOT NULL ORDER BY x.archived_at DESC LIMIT 200`).all().map(serializeResultRow) : [];
     const users = owner ? db.prepare('SELECT id, email, role, active, created_at FROM users ORDER BY created_at ASC').all() : [];
-    res.json({ requests, codes, results, users, currentUser: req.admin, emailReady: emailReady(), profile: scoringProfile() });
+    res.json({ requests, codes, results, archivedResults, users, currentUser: req.admin, emailReady: isEmailReady(), profile: scoringProfile() });
   });
 
   app.post('/api/admin/requests/:id/approve', requireAdmin(db), requireOwner, async (req, res) => {
     const requestRow = db.prepare('SELECT * FROM requests WHERE id = ?').get(numericId(req.params.id));
     if (!requestRow) return res.status(404).json({ error: 'الطلب غير موجود.' });
     if (requestRow.status === 'rejected') return res.status(409).json({ error: 'الطلب مرفوض. غيّر حالته أولًا.' });
-    const created = createCodeRecord(db, { requestId: requestRow.id, label: requestRow.entity_name, expiresInDays: Number(req.body?.expiresInDays || 14) });
-    db.prepare("UPDATE requests SET status = 'approved', decided_at = ? WHERE id = ?").run(new Date().toISOString(), requestRow.id);
+    let created;
+    try {
+      created = approveRequestCode(db, requestRow, Number(req.body?.expiresInDays || 14));
+    } catch (error) {
+      if (error.message === 'REQUEST_ALREADY_APPROVED') return res.status(409).json({ error: 'سبق اعتماد الطلب وإصدار رمز له.' });
+      if (error.message === 'REQUEST_CODE_UNRECOVERABLE') return res.status(409).json({ error: 'تعذر التحقق من رمز الطلب المعلق. أوقف العملية وراجع بيانات الرمز.' });
+      throw error;
+    }
     let delivery = { sent: false, reason: 'not_requested' };
     if (req.body?.sendEmail !== false) {
-      delivery = await sendAccessCode({
+      delivery = await mailer.sendAccessCode({
         to: requestRow.email, entityName: requestRow.entity_name, code: created.rawCode,
         expiresAt: created.expiresAt, baseUrl: baseUrl(req)
       }).catch((error) => ({ sent: false, reason: error.message }));
@@ -142,9 +182,13 @@ export async function createApp(options = {}) {
   });
 
   app.post('/api/admin/requests/:id/status', requireAdmin(db), requireOwner, (req, res) => {
-    const status = z.enum(['pending', 'approved', 'rejected']).parse(req.body?.status);
-    const changed = db.prepare('UPDATE requests SET status = ?, decided_at = ? WHERE id = ?').run(status, new Date().toISOString(), numericId(req.params.id));
-    if (!changed.changes) return res.status(404).json({ error: 'الطلب غير موجود.' });
+    const status = z.enum(['pending', 'rejected']).parse(req.body?.status);
+    const id = numericId(req.params.id);
+    const current = db.prepare('SELECT status FROM requests WHERE id = ?').get(id);
+    if (!current) return res.status(404).json({ error: 'الطلب غير موجود.' });
+    if (current.status === 'approved') return res.status(409).json({ error: 'لا يمكن تغيير حالة طلب صدر له رمز دخول.' });
+    db.prepare('UPDATE requests SET status = ?, decided_at = ? WHERE id = ?')
+      .run(status, status === 'rejected' ? new Date().toISOString() : null, id);
     res.json({ ok: true });
   });
 
@@ -156,18 +200,51 @@ export async function createApp(options = {}) {
 
   app.post('/api/admin/codes/:id/status', requireAdmin(db), requireOwner, (req, res) => {
     const status = z.enum(['active', 'stopped']).parse(req.body?.status);
-    const current = db.prepare('SELECT status FROM access_codes WHERE id = ?').get(numericId(req.params.id));
+    const current = db.prepare(`SELECT c.status, c.request_id, r.status AS request_status
+      FROM access_codes c LEFT JOIN requests r ON r.id = c.request_id WHERE c.id = ?`).get(numericId(req.params.id));
     if (!current) return res.status(404).json({ error: 'الرمز غير موجود.' });
     if (current.status === 'used') return res.status(409).json({ error: 'لا يمكن إعادة تفعيل رمز مستخدم.' });
+    if (status === 'active' && current.request_id && current.request_status !== 'approved') {
+      return res.status(409).json({ error: 'اعتمد الطلب من قسم الطلبات لإصدار هذا الرمز بأمان.' });
+    }
     db.prepare('UPDATE access_codes SET status = ? WHERE id = ?').run(status, numericId(req.params.id));
     res.json({ ok: true });
   });
 
+  app.post('/api/admin/codes/:id/reveal', requireAdmin(db), requireOwner, (req, res) => {
+    const row = db.prepare('SELECT code_hash, code_ciphertext FROM access_codes WHERE id = ?').get(numericId(req.params.id));
+    if (!row) return res.status(404).json({ error: 'الرمز غير موجود.' });
+    const accessCode = decryptAccessCode(row.code_ciphertext);
+    if (!accessCode || hashToken('access-code', normalizeCode(accessCode)) !== row.code_hash) {
+      return res.status(409).json({ error: 'لا يمكن إظهار هذا الرمز لأنه أُنشئ قبل دعم الحفظ المشفر أو تعذر التحقق من بياناته.' });
+    }
+    res.json({ accessCode });
+  });
+
   app.patch('/api/admin/results/:id/advisory', requireAdmin(db), (req, res) => {
     const data = parse(advisorySchema, req.body);
-    const changed = db.prepare('UPDATE results SET recommendations = ?, improvement_plan = ?, updated_at = ? WHERE id = ?')
+    const changed = db.prepare('UPDATE results SET recommendations = ?, improvement_plan = ?, updated_at = ? WHERE id = ? AND archived_at IS NULL')
       .run(safeMultilineValue(data.recommendations, 8000), safeMultilineValue(data.improvementPlan, 8000), new Date().toISOString(), numericId(req.params.id));
     if (!changed.changes) return res.status(404).json({ error: 'النتيجة غير موجودة.' });
+    res.json({ ok: true });
+  });
+
+  app.delete('/api/admin/results/:id', requireAdmin(db), requireOwner, (req, res) => {
+    const id = numericId(req.params.id);
+    const row = db.prepare('SELECT id, archived_at FROM results WHERE id = ?').get(id);
+    if (!row) return res.status(404).json({ error: 'النتيجة غير موجودة.' });
+    if (row.archived_at) return res.status(409).json({ error: 'النتيجة مؤرشفة بالفعل.' });
+    const archivedAt = new Date().toISOString();
+    db.prepare('UPDATE results SET archived_at = ?, updated_at = ? WHERE id = ? AND archived_at IS NULL').run(archivedAt, archivedAt, id);
+    res.json({ ok: true, archivedAt });
+  });
+
+  app.post('/api/admin/results/:id/restore', requireAdmin(db), requireOwner, (req, res) => {
+    const id = numericId(req.params.id);
+    const row = db.prepare('SELECT id, archived_at FROM results WHERE id = ?').get(id);
+    if (!row) return res.status(404).json({ error: 'النتيجة غير موجودة.' });
+    if (!row.archived_at) return res.status(409).json({ error: 'النتيجة غير مؤرشفة.' });
+    db.prepare('UPDATE results SET archived_at = NULL, updated_at = ? WHERE id = ? AND archived_at IS NOT NULL').run(new Date().toISOString(), id);
     res.json({ ok: true });
   });
 
@@ -187,14 +264,16 @@ export async function createApp(options = {}) {
     const target = db.prepare('SELECT id, role FROM users WHERE id = ?').get(id);
     if (!target) return res.status(404).json({ error: 'الحساب غير موجود.' });
     if (target.role === 'owner') return res.status(409).json({ error: 'لا يمكن تعطيل حساب المالك من هذه الواجهة.' });
-    db.prepare('UPDATE users SET active = ? WHERE id = ?').run(active ? 1 : 0, id);
-    if (!active) db.prepare('DELETE FROM sessions WHERE user_id = ?').run(id);
+    withTransaction(db, () => {
+      db.prepare('UPDATE users SET active = ? WHERE id = ?').run(active ? 1 : 0, id);
+      if (!active) db.prepare('DELETE FROM sessions WHERE user_id = ?').run(id);
+    });
     res.json({ ok: true });
   });
 
   app.post('/api/admin/results/:id/share-link', requireAdmin(db), async (req, res) => {
     const row = db.prepare(`SELECT x.*, r.email FROM results x JOIN access_codes c ON c.id = x.access_code_id
-      LEFT JOIN requests r ON r.id = c.request_id WHERE x.id = ?`).get(numericId(req.params.id));
+      LEFT JOIN requests r ON r.id = c.request_id WHERE x.id = ? AND x.archived_at IS NULL`).get(numericId(req.params.id));
     if (!row) return res.status(404).json({ error: 'النتيجة غير موجودة.' });
     const rawToken = randomToken(32);
     db.prepare('UPDATE results SET report_token_hash = ?, updated_at = ? WHERE id = ?')
@@ -203,14 +282,14 @@ export async function createApp(options = {}) {
     let delivery = { sent: false, reason: 'not_requested' };
     if (req.body?.sendEmail && row.email) {
       const entity = JSON.parse(row.entity_json);
-      delivery = await sendReportLink({ to: row.email, entityName: entity.entityName, reportUrl })
+      delivery = await mailer.sendReportLink({ to: row.email, entityName: entity.entityName, reportUrl })
         .catch((error) => ({ sent: false, reason: error.message }));
     }
     res.json({ ok: true, reportUrl, emailDelivery: delivery });
   });
 
   app.get('/api/admin/results/:id/export.xlsx', requireAdmin(db), async (req, res) => {
-    const row = db.prepare('SELECT * FROM results WHERE id = ?').get(numericId(req.params.id));
+    const row = db.prepare('SELECT * FROM results WHERE id = ? AND archived_at IS NULL').get(numericId(req.params.id));
     if (!row) return res.status(404).json({ error: 'النتيجة غير موجودة.' });
     const buffer = await createWorkbook(row);
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -219,12 +298,16 @@ export async function createApp(options = {}) {
   });
 
   app.post('/api/access', codeLimiter, (req, res) => {
-    const data = parse(accessSchema, req.body);
-    const normalized = normalizeCode(data.code);
+    const suppliedCode = req.body?.code;
+    if (typeof suppliedCode !== 'string' || !suppliedCode.trim() || suppliedCode.length > 80) {
+      return res.status(401).json({ error: invalidCodeMessage });
+    }
+    const normalized = normalizeCode(suppliedCode);
+    if (normalized.length < 8 || normalized.length > 40) return res.status(401).json({ error: invalidCodeMessage });
     const row = db.prepare('SELECT * FROM access_codes WHERE code_hash = ?').get(hashToken('access-code', normalized));
     const now = new Date();
     if (!row || row.status !== 'active' || row.claimed_at || (row.expires_at && new Date(row.expires_at) < now)) {
-      return res.status(401).json({ error: 'الرمز غير صالح أو سبق استخدامه.' });
+      return res.status(401).json({ error: invalidCodeMessage });
     }
     const rawSession = randomToken();
     const expires = new Date(Math.min(now.getTime() + 48 * 60 * 60 * 1000, row.expires_at ? new Date(row.expires_at).getTime() : Infinity));
@@ -235,7 +318,7 @@ export async function createApp(options = {}) {
         .run(row.id, hashToken('assessment-session', rawSession), expires.toISOString(), now.toISOString());
     });
     try { transaction(); } catch (error) {
-      if (error.message === 'CODE_ALREADY_CLAIMED') return res.status(409).json({ error: 'سبق فتح جلسة بهذا الرمز.' });
+      if (error.message === 'CODE_ALREADY_CLAIMED') return res.status(401).json({ error: invalidCodeMessage });
       throw error;
     }
     setCookie(res, 'manar_assessment', rawSession, expires.getTime() - now.getTime());
@@ -300,7 +383,7 @@ export async function createApp(options = {}) {
     const requestRow = db.prepare(`SELECT r.email FROM requests r JOIN access_codes c ON c.request_id = r.id WHERE c.id = ?`).get(req.assessment.accessCodeId);
     let delivery = { sent: false, reason: 'not_configured' };
     if (requestRow?.email) {
-      delivery = await sendReportLink({ to: requestRow.email, entityName: entity.entityName, reportUrl })
+      delivery = await mailer.sendReportLink({ to: requestRow.email, entityName: entity.entityName, reportUrl })
         .catch((error) => ({ sent: false, reason: error.message }));
     }
     res.status(201).json({ ok: true, resultId, reportUrl, emailDelivery: delivery });
@@ -308,7 +391,7 @@ export async function createApp(options = {}) {
 
   app.get('/api/reports/:token', (req, res) => {
     if (!/^[A-Za-z0-9_-]{43}$/.test(req.params.token)) return res.status(404).json({ error: 'رابط التقرير غير صالح.' });
-    const row = db.prepare('SELECT * FROM results WHERE report_token_hash = ?').get(hashToken('report', req.params.token));
+    const row = db.prepare('SELECT * FROM results WHERE report_token_hash = ? AND archived_at IS NULL').get(hashToken('report', req.params.token));
     if (!row) return res.status(404).json({ error: 'التقرير غير موجود أو أن رابطه تم استبداله.' });
     res.setHeader('Cache-Control', 'private, no-store, max-age=0');
     res.json({
@@ -380,9 +463,10 @@ function requireAdmin(db) {
   return (req, res, next) => {
     const raw = req.cookies.manar_admin;
     if (!raw) return res.status(401).json({ error: 'يلزم تسجيل الدخول.' });
-    const row = db.prepare(`SELECT u.id, u.email, u.role, s.id session_id, s.expires_at FROM sessions s
+    const row = db.prepare(`SELECT u.id, u.email, u.role, u.active, s.id session_id, s.expires_at FROM sessions s
       JOIN users u ON u.id = s.user_id WHERE s.token_hash = ?`).get(hashToken('admin-session', raw));
-    if (!row || new Date(row.expires_at) < new Date()) {
+    if (!row || !row.active || new Date(row.expires_at) < new Date()) {
+      if (row?.session_id) db.prepare('DELETE FROM sessions WHERE id = ?').run(row.session_id);
       clearCookie(res, 'manar_admin');
       return res.status(401).json({ error: 'انتهت جلسة الدخول.' });
     }
@@ -412,15 +496,82 @@ function requireOwner(req, res, next) {
   next();
 }
 
-function createCodeRecord(db, { requestId = null, label, expiresInDays = 14 }) {
+function createCodeRecord(db, { requestId = null, label, expiresInDays = 14, status = 'active' }) {
+  if (!['active', 'stopped'].includes(status)) throw new Error('INVALID_INITIAL_CODE_STATUS');
   const days = Math.max(1, Math.min(90, Number.isFinite(expiresInDays) ? expiresInDays : 14));
   const rawCode = createAccessCode();
   const normalized = normalizeCode(rawCode);
   const now = new Date();
   const expiresAt = new Date(now.getTime() + days * 24 * 60 * 60 * 1000).toISOString();
-  db.prepare(`INSERT INTO access_codes (request_id, label, code_hash, code_last4, status, expires_at, created_at)
-    VALUES (?, ?, ?, ?, 'active', ?, ?)`).run(requestId, label, hashToken('access-code', normalized), normalized.slice(-4), expiresAt, now.toISOString());
-  return { rawCode, expiresAt };
+  const inserted = db.prepare(`INSERT INTO access_codes (request_id, label, code_hash, code_last4, code_ciphertext, status, expires_at, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(requestId, label, hashToken('access-code', normalized), normalized.slice(-4), encryptAccessCode(rawCode), status, expiresAt, now.toISOString());
+  return { id: Number(inserted.lastInsertRowid), rawCode, expiresAt };
+}
+
+function activateDeliveredCode(db, requestId, codeId) {
+  return withTransaction(db, () => {
+    const requestRow = db.prepare('SELECT status FROM requests WHERE id = ?').get(requestId);
+    const codeRow = db.prepare('SELECT status, claimed_at, used_at FROM access_codes WHERE id = ? AND request_id = ?').get(codeId, requestId);
+    if (requestRow?.status === 'approved' && ['active', 'used'].includes(codeRow?.status)) return true;
+    if (requestRow?.status !== 'pending' || codeRow?.status !== 'stopped' || codeRow.claimed_at || codeRow.used_at) return false;
+    const now = new Date().toISOString();
+    const activated = db.prepare("UPDATE access_codes SET status = 'active' WHERE id = ? AND request_id = ? AND status = 'stopped' AND claimed_at IS NULL AND used_at IS NULL")
+      .run(codeId, requestId);
+    const approved = db.prepare("UPDATE requests SET status = 'approved', decided_at = ? WHERE id = ? AND status = 'pending'")
+      .run(now, requestId);
+    if (!activated.changes || !approved.changes) throw new Error('DELIVERED_CODE_ACTIVATION_RACE');
+    return true;
+  });
+}
+
+function discardUndeliveredCode(db, requestId, codeId) {
+  return withTransaction(db, () => {
+    const requestRow = db.prepare('SELECT status FROM requests WHERE id = ?').get(requestId);
+    if (requestRow?.status !== 'pending') return false;
+    return Boolean(db.prepare("DELETE FROM access_codes WHERE id = ? AND request_id = ? AND status = 'stopped' AND claimed_at IS NULL AND used_at IS NULL")
+      .run(codeId, requestId).changes);
+  });
+}
+
+function approveRequestCode(db, requestRow, expiresInDays) {
+  return withTransaction(db, () => {
+    const current = db.prepare('SELECT status FROM requests WHERE id = ?').get(requestRow.id);
+    if (!current || current.status === 'approved') throw new Error('REQUEST_ALREADY_APPROVED');
+    if (current.status === 'rejected') throw new Error('REQUEST_CODE_UNRECOVERABLE');
+    const linkedCodes = db.prepare('SELECT * FROM access_codes WHERE request_id = ? ORDER BY id DESC').all(requestRow.id);
+    if (linkedCodes.length > 1) throw new Error('REQUEST_CODE_UNRECOVERABLE');
+    let linked = linkedCodes[0] || null;
+    if (linked && linked.status === 'stopped' && !linked.claimed_at && !linked.used_at && linked.expires_at && new Date(linked.expires_at) <= new Date()) {
+      db.prepare("DELETE FROM access_codes WHERE id = ? AND request_id = ? AND status = 'stopped' AND claimed_at IS NULL AND used_at IS NULL")
+        .run(linked.id, requestRow.id);
+      linked = null;
+    }
+    let created;
+    if (linked) {
+      if (linked.status !== 'stopped' || linked.claimed_at || linked.used_at) throw new Error('REQUEST_ALREADY_APPROVED');
+      const rawCode = decryptAccessCode(linked.code_ciphertext);
+      if (!rawCode || hashToken('access-code', normalizeCode(rawCode)) !== linked.code_hash) throw new Error('REQUEST_CODE_UNRECOVERABLE');
+      created = { id: linked.id, rawCode, expiresAt: linked.expires_at };
+    } else {
+      created = createCodeRecord(db, {
+        requestId: requestRow.id,
+        label: requestRow.entity_name,
+        expiresInDays,
+        status: 'stopped'
+      });
+    }
+    const now = new Date().toISOString();
+    const activated = db.prepare("UPDATE access_codes SET status = 'active' WHERE id = ? AND request_id = ? AND status = 'stopped' AND claimed_at IS NULL AND used_at IS NULL")
+      .run(created.id, requestRow.id);
+    const approved = db.prepare("UPDATE requests SET status = 'approved', decided_at = ? WHERE id = ? AND status = 'pending'")
+      .run(now, requestRow.id);
+    if (!activated.changes || !approved.changes) throw new Error('REQUEST_CODE_UNRECOVERABLE');
+    return created;
+  });
+}
+
+function serializeResultRow(row) {
+  return { ...row, entity: JSON.parse(row.entity_json), result: JSON.parse(row.result_json), entity_json: undefined, result_json: undefined };
 }
 
 function sanitizeEntity(entity) {

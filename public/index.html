@@ -13,8 +13,7 @@
   <header class="site-header">
     <nav class="nav" aria-label="التنقل الرئيسي">
       <a class="brand" href="/">
-        <span class="brand-mark" aria-hidden="true">م</span>
-        <span class="brand-copy">مقياس منار<small>للتميز التربوي المؤسسي</small></span>
+        <img class="brand-logo" src="/assets/manar-rakaez-wordmark.svg" alt="مقياس منار، شركة ركائز المدينة للاستشارات التعليمية والتربوية">
       </a>
       <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="nav-links">القائمة</button>
       <div class="nav-links" id="nav-links">
@@ -45,8 +44,9 @@
           <p>أدخل الرمز الذي شاركته الإدارة مع جهتك للانتقال إلى التقييم.</p>
           <form class="code-inline" data-access-form>
             <label class="sr-only" for="hero-code">رمز الدخول</label>
-            <input id="hero-code" name="code" type="text" autocomplete="one-time-code" placeholder="MNR-XXXX-XXXX-XXXX" aria-describedby="hero-code-message" required>
+            <input id="hero-code" name="code" type="text" autocomplete="one-time-code" placeholder="MNR-XXXX-XXXX-XXXX" aria-describedby="hero-code-helper hero-code-message" required>
             <button class="button button-primary" type="submit">دخول</button>
+            <small class="code-helper" id="hero-code-helper">الصق الرمز كاملًا كما وصلك بالبريد؛ رموز المنصة الجديدة تبدأ بـ MNR-.</small>
           </form>
           <div class="notice hidden" id="hero-code-message" data-form-message role="status" aria-live="polite"></div>
         </aside>
@@ -95,7 +95,7 @@
         </div>
         <div class="steps">
           <article class="step"><h3>طلب التطبيق</h3><p>تسجل الجهة بياناتها الأساسية وبيانات التواصل.</p></article>
-          <article class="step"><h3>اعتماد ورمز خاص</h3><p>تراجع الإدارة الطلب وترسل رمزًا مخصصًا محدود الصلاحية.</p></article>
+          <article class="step"><h3>رمز دخول خاص</h3><p>يرسل النظام الرمز مباشرة عند تهيئة البريد، أو تتولى الإدارة مشاركته مع الجهة عبر قناة آمنة.</p></article>
           <article class="step"><h3>تقييم متدرج</h3><p>تُستكمل المحاور خطوة بخطوة، ولا يقبل الإرسال مع إجابات ناقصة.</p></article>
           <article class="step"><h3>تقرير قابل للمشاركة</h3><p>تُحفظ النتيجة ويُنشأ رابط عرض خاص ونسخة PDF.</p></article>
         </div>
@@ -107,7 +107,7 @@
         <div>
           <span class="eyebrow">طلب تطبيق المقياس</span>
           <h2>ابدأ بطلب رسمي للجهة</h2>
-          <p class="muted" id="request-delivery-note">بعد مراجعة الطلب، تشارك الإدارة رمز الدخول مع الجهة. لن تظهر إجابات التقييم في الرابط.</p>
+          <p class="muted" id="request-delivery-note">يُسجل الطلب فورًا ليتابعه مسؤول المقياس ويزوّد الجهة بالرمز عبر قناة آمنة. لن تظهر إجابات التقييم في الرابط.</p>
           <div class="card">
             <h3>قبل البدء</h3>
             <p>جهّز فريق التقييم والشواهد الداعمة، واتفقوا على إجابة واحدة لكل مؤشر تعكس واقع الجهة بدقة.</p>
@@ -121,7 +121,7 @@
             <div class="field"><label for="phone">رقم التواصل <span class="muted">(اختياري)</span></label><input id="phone" name="phone" type="tel" maxlength="32"></div>
           </div>
           <div class="field"><label for="notes">ملاحظات <span class="muted">(اختياري)</span></label><textarea id="notes" name="notes" maxlength="1200"></textarea></div>
-          <button class="button button-dark" type="submit">إرسال الطلب</button>
+          <button class="button button-dark" id="request-submit" type="submit">إرسال الطلب</button>
           <div class="notice hidden" data-form-message aria-live="polite"></div>
         </form>
       </div>
@@ -130,7 +130,7 @@
 
   <footer class="site-footer">
     <div class="container footer-inner">
-      <div><strong>مقياس منار للتميز التربوي المؤسسي</strong><br><span class="small">شركة ركائز المدينة للاستشارات التعليمية والتربوية</span></div>
+      <div class="footer-brand"><img class="brand-logo brand-logo-footer" src="/assets/manar-rakaez-wordmark.svg" alt="مقياس منار، شركة ركائز المدينة للاستشارات التعليمية والتربوية"><span class="small">مقياس منار للتميز التربوي المؤسسي</span></div>
       <nav class="footer-links" aria-label="روابط ختامية"><a href="#about">عن المقياس</a><a href="#method">آلية التطبيق</a><a href="#request">طلب التطبيق والتواصل</a><a href="/admin">دخول الإدارة</a></nav>
     </div>
   </footer>

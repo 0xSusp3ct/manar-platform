@@ -3,6 +3,8 @@ const ui = { loading: $('report-loading'), pages: $('report-pages'), message: $(
 let reportData;
 let ready = false;
 let messageTimer;
+let printWordmarkSrc = '/assets/manar-rakaez-wordmark.png';
+let printWordmarkImage;
 ui.print.addEventListener('click', () => { if (ready) window.print(); });
 ui.download.addEventListener('click', downloadPdf);
 ui.copy.addEventListener('click', () => copyText(summaryText(), 'تم نسخ ملخص التقرير.'));
@@ -19,8 +21,12 @@ async function loadReport() {
     reportData = data;
     renderScreen(data);
     ui.loading.classList.add('hidden'); ui.screen.classList.remove('hidden');
-    await document.fonts.ready;
+    await Promise.all([document.fonts.ready, preloadImage('/assets/manar-rakaez-wordmark.svg')]);
+    printWordmarkSrc = await imageDataUrl('/assets/manar-rakaez-wordmark.png');
+    await preloadImage(printWordmarkSrc);
+    printWordmarkImage = await decodedImage(printWordmarkSrc);
     buildPrintDocument(data);
+    await waitForPrintImages();
     ready = true;
     [ui.download, ui.print, ui.copy, ui.link].forEach((button) => { button.disabled = false; });
     document.documentElement.dataset.reportReady = 'true';
@@ -89,7 +95,8 @@ function makePrintPage(title, cover = false) {
   const page = element('section', `print-page${cover ? ' print-cover' : ''}`);
   if (cover) page.append(element('div', 'cover-art outer'), element('div', 'cover-art middle'), element('div', 'cover-art'), element('div', 'cover-tint'));
   const header = element('header', 'print-header');
-  header.append(element('span', 'print-brand', 'مقياس منار'), element('span', 'print-heading-meta', title));
+  const logo = element('img', 'print-brand-logo'); logo.src = printWordmarkSrc; logo.alt = 'مقياس منار، شركة ركائز المدينة للاستشارات التعليمية والتربوية';
+  header.append(logo, element('span', 'print-heading-meta', title));
   const body = element('div', 'print-body');
   const footer = element('footer', 'print-footer');
   footer.append(element('span', '', 'شركة ركائز المدينة للاستشارات التعليمية والتربوية'), element('span', 'print-page-number'));
@@ -150,7 +157,8 @@ function buildPrintDocument(data) {
   ui.pages.replaceChildren();
   const { entity, result } = data;
   const cover = makePrintPage('للتميز التربوي المؤسسي', true);
-  cover.body.append(element('h1', 'cover-title', 'تقرير نتائج\nالتقييم المؤسسي'), element('p', 'cover-subtitle', 'قراءة متكاملة للنتائج وأولويات التحسين'), element('h2', 'cover-entity', entity.entityName), element('p', 'cover-detail', `المقيم / فريق التقييم: ${entity.assessorName}`), element('p', 'cover-detail', `تاريخ التقييم: ${formatDate(entity.evaluationDate)}`), element('p', 'cover-detail', `تاريخ الإصدار: ${formatDate(data.submittedAt)}`), element('p', 'cover-note', 'تقرير خاص بالجهة المعنية • للعرض والمشاركة المخصصة'));
+  const coverLogo = element('img', 'cover-logo'); coverLogo.src = printWordmarkSrc; coverLogo.alt = 'مقياس منار، شركة ركائز المدينة للاستشارات التعليمية والتربوية';
+  cover.body.append(coverLogo, element('h1', 'cover-title', 'تقرير نتائج\nالتقييم المؤسسي'), element('p', 'cover-subtitle', 'قراءة متكاملة للنتائج وأولويات التحسين'), element('h2', 'cover-entity', entity.entityName), element('p', 'cover-detail', `المقيم / فريق التقييم: ${entity.assessorName}`), element('p', 'cover-detail', `تاريخ التقييم: ${formatDate(entity.evaluationDate)}`), element('p', 'cover-detail', `تاريخ الإصدار: ${formatDate(data.submittedAt)}`), element('p', 'cover-note', 'تقرير خاص بالجهة المعنية • للعرض والمشاركة المخصصة'));
   const score = element('div', 'print-score'); score.append(scoreGraphic(result.overallPercent));
   const scoreCopy = element('div'); scoreCopy.append(element('h3', '', `مرحلة ${result.maturity}`), element('p', '', result.systemRecommendation)); score.append(scoreCopy);
   const metadata = element('div', 'print-metadata');
@@ -183,6 +191,50 @@ function scoreGraphic(percent) {
   const text = document.createElementNS(ns, 'text'); text.setAttribute('x','90'); text.setAttribute('y','101'); text.setAttribute('text-anchor','middle'); text.setAttribute('fill','#344a5c'); text.setAttribute('font-size','30'); text.setAttribute('font-family','Tahoma'); text.textContent = `${number(percent)}٪`; svg.append(text); return svg;
 }
 
+function preloadImage(src) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = async () => { try { if (image.decode) await image.decode(); } catch {} resolve(); };
+    image.onerror = () => reject(new Error('تعذر تحميل هوية التقرير.'));
+    image.src = src;
+  });
+}
+
+async function imageDataUrl(src) {
+  const response = await fetch(src, { credentials: 'same-origin', cache: 'force-cache' });
+  if (!response.ok) throw new Error('تعذر تحميل هوية التقرير.');
+  const blob = await response.blob();
+  if (blob.type !== 'image/png') throw new Error('صيغة هوية التقرير غير صالحة للطباعة.');
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error('تعذر تجهيز هوية التقرير للطباعة.'));
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function decodedImage(src) {
+  const image = new Image();
+  image.src = src;
+  if (image.decode) await image.decode();
+  else await new Promise((resolve, reject) => { image.onload = resolve; image.onerror = reject; });
+  return image;
+}
+
+async function waitForPrintImages() {
+  const images = [...ui.pages.querySelectorAll('img')];
+  await Promise.all(images.map(async (image) => {
+    if (!image.complete || !image.naturalWidth) {
+      await new Promise((resolve, reject) => {
+        image.addEventListener('load', resolve, { once: true });
+        image.addEventListener('error', () => reject(new Error('تعذر تحميل هوية إحدى صفحات التقرير.')), { once: true });
+      });
+    }
+    try { if (image.decode) await image.decode(); } catch {}
+    if (!image.naturalWidth) throw new Error('تعذر تجهيز هوية إحدى صفحات التقرير.');
+  }));
+}
+
 async function downloadPdf() {
   if (!ready || ui.download.disabled) return;
   if (!window.html2canvas || !window.jspdf) return showMessage('تعذر تجهيز مكتبة PDF. أعد تحميل الصفحة أو استخدم زر الطباعة.', true);
@@ -196,11 +248,41 @@ async function downloadPdf() {
       ui.download.textContent = `تجهيز الصفحة ${number(i + 1)} من ${number(sheets.length)}`;
       const canvas = await window.html2canvas(sheets[i], {
         scale:2, backgroundColor:'#ffffff', logging:false, windowWidth:1200, windowHeight:1300, scrollX:0, scrollY:0,
-        onclone: (doc) => { const root = doc.getElementById('report-pages'); root.style.position = 'absolute'; root.style.left = '0'; root.style.top = '0'; }
+        onclone: (doc) => {
+          const root = doc.getElementById('report-pages'); root.style.position = 'absolute'; root.style.left = '0'; root.style.top = '0';
+          doc.querySelectorAll('.print-brand-logo').forEach((image) => { image.style.visibility = 'hidden'; });
+        }
       });
+      // Compose the page onto a fresh canvas before adding the identity mark.
+      // html2canvas can leave an internal clip/transform on its own context,
+      // which made later drawings disappear on some browsers/PDF pages.
+      const composedCanvas = document.createElement('canvas');
+      composedCanvas.width = canvas.width;
+      composedCanvas.height = canvas.height;
+      const context = composedCanvas.getContext('2d');
+      context.drawImage(canvas, 0, 0);
+      const markX = composedCanvas.width * (136 / 210);
+      const markY = composedCanvas.height * (16 / 297);
+      const markWidth = composedCanvas.width * (58 / 210);
+      const markHeight = composedCanvas.height * (16.76 / 297);
+      context.drawImage(
+        printWordmarkImage,
+        markX, markY, markWidth, markHeight
+      );
+      const identityPixels = context.getImageData(
+        Math.floor(markX), Math.floor(markY), Math.ceil(markWidth), Math.ceil(markHeight)
+      ).data;
+      let visibleIdentityPixels = 0;
+      for (let pixel = 0; pixel < identityPixels.length; pixel += 4) {
+        if (identityPixels[pixel] < 225 || identityPixels[pixel + 1] < 225 || identityPixels[pixel + 2] < 225) visibleIdentityPixels += 1;
+      }
+      if (visibleIdentityPixels < identityPixels.length / 160) throw new Error('تعذر تثبيت هوية التقرير في إحدى صفحات PDF.');
       if (i) pdf.addPage('a4', 'portrait');
-      pdf.addImage(canvas.toDataURL('image/jpeg', .97), 'JPEG', 0, 0, 210, 297);
+      // A unique alias prevents jsPDF's image cache from reusing another
+      // full-page raster when two large JPEGs happen to share a hash.
+      pdf.addImage(composedCanvas.toDataURL('image/jpeg', .97), 'JPEG', 0, 0, 210, 297, `manar-page-${i + 1}`);
       canvas.width = 0; canvas.height = 0;
+      composedCanvas.width = 0; composedCanvas.height = 0;
     }
     const name = reportData.entity.entityName.replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-|-$/g, '').slice(0, 60) || 'manar';
     pdf.save(`تقرير-منار-${name}.pdf`);

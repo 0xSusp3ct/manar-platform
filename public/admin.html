@@ -8,18 +8,19 @@
 </head>
 <body>
   <main id="admin-login" class="form-shell">
-    <section class="form-card"><span class="eyebrow">بوابة الإدارة</span><h1>تسجيل دخول الإدارة</h1><p class="muted">هذه الصفحة مخصصة لإدارة الطلبات والرموز والنتائج وفق صلاحيات الحساب.</p>
+    <section class="form-card"><a class="brand form-brand" href="/"><img class="brand-logo" src="/assets/manar-rakaez-wordmark.svg" alt="مقياس منار، شركة ركائز المدينة للاستشارات التعليمية والتربوية"></a><span class="eyebrow">بوابة الإدارة</span><h1>تسجيل دخول الإدارة</h1><p class="muted">هذه الصفحة مخصصة لإدارة الطلبات والرموز والنتائج وفق صلاحيات الحساب.</p>
       <form id="login-form"><div class="field"><label for="admin-email">البريد الإلكتروني</label><input id="admin-email" type="email" autocomplete="username" required></div><div class="field"><label for="admin-password">كلمة المرور</label><input id="admin-password" type="password" autocomplete="current-password" required></div><button class="button button-dark" type="submit">دخول</button><div class="notice hidden" id="login-message" aria-live="polite"></div></form>
     </section>
   </main>
 
   <div id="admin-app" class="admin-shell hidden">
     <aside class="admin-sidebar">
-      <a class="brand" href="/"><span class="brand-mark">م</span><span>إدارة منار</span></a>
+      <a class="brand" href="/"><img class="brand-logo brand-logo-sidebar" src="/assets/manar-rakaez-wordmark.svg" alt="مقياس منار، شركة ركائز المدينة للاستشارات التعليمية والتربوية"></a>
       <nav aria-label="أقسام الإدارة">
         <button class="active" data-section="requests" type="button">الطلبات</button>
         <button data-section="codes" type="button">رموز الدخول</button>
         <button data-section="results" type="button">النتائج</button>
+        <button data-section="archived" type="button">سلة النتائج</button>
         <button data-section="users" type="button">المستخدمون</button>
       </nav>
     </aside>
@@ -28,8 +29,9 @@
       <div class="notice hidden" id="admin-message" aria-live="polite"></div>
       <section class="stat-grid"><article class="stat"><span>طلبات بانتظار الاعتماد</span><strong id="pending-count">٠</strong></article><article class="stat"><span>رموز فعالة</span><strong id="active-count">٠</strong></article><article class="stat"><span>تقارير مكتملة</span><strong id="result-count">٠</strong></article></section>
       <section id="requests-section" class="admin-section"><div class="table-wrap"><table><thead><tr><th>الجهة</th><th>ممثل الجهة</th><th>التواصل</th><th>الحالة</th><th>التاريخ</th><th>الإجراءات</th></tr></thead><tbody id="requests-body"></tbody></table></div></section>
-      <section id="codes-section" class="admin-section hidden"><div class="table-wrap"><table><thead><tr><th>الجهة / الوصف</th><th>آخر ٤ رموز</th><th>الحالة</th><th>الصلاحية</th><th>الإنشاء</th><th>الإجراءات</th></tr></thead><tbody id="codes-body"></tbody></table></div></section>
+      <section id="codes-section" class="admin-section hidden"><div class="table-wrap"><table><thead><tr><th>الجهة / الوصف</th><th>رمز الدخول</th><th>الحالة</th><th>الصلاحية</th><th>الإنشاء</th><th>الإجراءات</th></tr></thead><tbody id="codes-body"></tbody></table></div></section>
       <section id="results-section" class="admin-section hidden"><div class="table-wrap"><table><thead><tr><th>الجهة</th><th>النتيجة</th><th>النضج</th><th>التاريخ</th><th>الإجراءات</th></tr></thead><tbody id="results-body"></tbody></table></div></section>
+      <section id="archived-section" class="admin-section hidden"><div class="section-heading admin-list-heading"><div><h2>سلة النتائج</h2><p>تُنقل النتائج المحذوفة إلى هذه السلة بدل إتلافها نهائيًا، ويمكن للمالك استعادتها في أي وقت.</p></div></div><div class="table-wrap"><table><thead><tr><th>الجهة</th><th>النتيجة</th><th>النضج</th><th>تاريخ التقييم</th><th>تاريخ الحذف</th><th>الإجراءات</th></tr></thead><tbody id="archived-results-body"></tbody></table></div></section>
       <section id="users-section" class="admin-section hidden"><div class="table-wrap"><table><thead><tr><th>البريد الإلكتروني</th><th>الدور</th><th>الحالة</th><th>تاريخ الإنشاء</th><th>الإجراءات</th></tr></thead><tbody id="users-body"></tbody></table></div></section>
     </main>
   </div>

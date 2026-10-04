@@ -16,6 +16,7 @@ const mime = {
   '.html': 'text/html; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
+  '.png': 'image/png',
   '.svg': 'image/svg+xml',
 };
 function embedded(source) {
@@ -41,7 +42,10 @@ function visit(directory) {
     const type = mime[path.extname(entry.name)];
     if (!type) throw new Error(`Unsupported public asset: ${target}`);
     const key = `/${path.relative(publicDir, target).replaceAll(path.sep, '/')}`;
-    assets[key] = { body: fs.readFileSync(target, 'utf8'), type };
+    const binary = path.extname(entry.name) === '.png';
+    assets[key] = binary
+      ? { body: fs.readFileSync(target).toString('base64'), type, encoding: 'base64' }
+      : { body: fs.readFileSync(target, 'utf8'), type };
   }
 }
 visit(publicDir);

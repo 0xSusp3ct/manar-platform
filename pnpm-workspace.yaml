@@ -1,2 +1,5 @@
 allowBuilds:
   core-js: true
+overrides:
+  dompurify: 3.4.16
+  ip-address: 10.7.3

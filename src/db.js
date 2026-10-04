@@ -44,6 +44,7 @@ export function openDatabase(databasePath = process.env.DATABASE_PATH || default
       label TEXT,
       code_hash TEXT NOT NULL UNIQUE,
       code_last4 TEXT NOT NULL,
+      code_ciphertext TEXT,
       status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','used','stopped')),
       expires_at TEXT,
       claimed_at TEXT,
@@ -75,7 +76,8 @@ export function openDatabase(databasePath = process.env.DATABASE_PATH || default
       recommendations TEXT NOT NULL DEFAULT '',
       improvement_plan TEXT NOT NULL DEFAULT '',
       submitted_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
+      updated_at TEXT NOT NULL,
+      archived_at TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token_hash);
     CREATE INDEX IF NOT EXISTS idx_assessment_sessions_token ON assessment_sessions(token_hash);
@@ -84,6 +86,11 @@ export function openDatabase(databasePath = process.env.DATABASE_PATH || default
   `);
   const userColumns = db.prepare('PRAGMA table_info(users)').all().map((column) => column.name);
   if (!userColumns.includes('active')) db.exec('ALTER TABLE users ADD COLUMN active INTEGER NOT NULL DEFAULT 1');
+  const accessCodeColumns = db.prepare('PRAGMA table_info(access_codes)').all().map((column) => column.name);
+  if (!accessCodeColumns.includes('code_ciphertext')) db.exec('ALTER TABLE access_codes ADD COLUMN code_ciphertext TEXT');
+  const resultColumns = db.prepare('PRAGMA table_info(results)').all().map((column) => column.name);
+  if (!resultColumns.includes('archived_at')) db.exec('ALTER TABLE results ADD COLUMN archived_at TEXT');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_results_archived_at ON results(archived_at);');
   return db;
 }
 
